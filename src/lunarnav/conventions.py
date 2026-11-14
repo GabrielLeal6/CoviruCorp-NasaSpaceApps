@@ -42,20 +42,6 @@ DEFAULT_MAX_RANGE_KM: float = 100.0
 DEFAULT_WINDOW_HOURS: int = 720
 DEFAULT_STEP_MINUTES: int = 60
 
-
-@dataclass
-class DemTile:
-    data: np.ndarray        # float32, meters above 1,737,400 m sphere, NaN = nodata
-    x0: float               # projected x of upper-left pixel center (m)
-    y0: float               # projected y of upper-left pixel center (m)
-    dx: float               # square pixel size (m)
-    crs: str                # south polar stereographic, lat_0=-90, R=1737400
-    frame: str              # 'MOON_ME'
-    source: str
-    res_m: float
-    coverage_lat_max: float
-
-
 @dataclass
 class HorizonProfile:
     az_deg: np.ndarray      # 0..360, step az_step_deg
