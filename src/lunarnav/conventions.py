@@ -42,31 +42,6 @@ DEFAULT_MAX_RANGE_KM: float = 100.0
 DEFAULT_WINDOW_HOURS: int = 720
 DEFAULT_STEP_MINUTES: int = 60
 
-# Curated site registry (replace placeholder coords with verified NASA sources per Verify #8)
-CURATED_SITES: dict[str, dict] = {
-    "site_01": {
-        "id": "site_01",
-        "name": "Connecting Ridge (Candidate)",
-        "lat": -89.53,
-        "lon": -150.05,
-        "notes": "High-illumination ridge near Shackleton crater.",
-    },
-    "site_02": {
-        "id": "site_02",
-        "name": "Peak Near Shackleton (Candidate)",
-        "lat": -88.81,
-        "lon": 123.76,
-        "notes": "Elevated massif with strong Earth line-of-sight.",
-    },
-    "site_03": {
-        "id": "site_03",
-        "name": "Malapert Massif (Candidate)",
-        "lat": -86.00,
-        "lon": 0.00,
-        "notes": "Lower-latitude massif farther from the pole.",
-    },
-}
-
 
 @dataclass
 class DemTile:
