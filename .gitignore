@@ -5,10 +5,6 @@ data/processed/*
 # ...but keep the small precomputed horizon profiles; they ship in the Docker image
 !data/processed/horizons/
 
-# Big SPICE binaries (keep data/kernels/CHECKSUMS.txt in git so the fetch script can verify them)
-data/kernels/*.bsp
-data/kernels/*.bpc
-
 # Raster and DEM formats anywhere in the repo (GitHub rejects files over 100 MB)
 *.tif
 *.tiff
