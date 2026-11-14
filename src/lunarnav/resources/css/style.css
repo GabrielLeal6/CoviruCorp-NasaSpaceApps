@@ -193,6 +193,50 @@ h1 {
   border-bottom: 1px solid #25334a;
 }
 
+.map-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.map-view-controls {
+  display: inline-flex;
+  gap: 0.35rem;
+  padding: 0.25rem;
+  border: 1px solid #344761;
+  border-radius: 0.7rem;
+  background: #0a1220;
+}
+
+.map-view-button {
+  min-height: 2.25rem;
+  padding: 0.45rem 0.75rem;
+  border: 1px solid transparent;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: #b7c5d9;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+.map-view-button:hover {
+  background: #172941;
+  color: #f5f7fb;
+}
+
+.map-view-button.is-active {
+  border-color: #6888b6;
+  background: #223b5d;
+  color: #fff;
+}
+
+.map-view-button:focus-visible {
+  outline: 2px solid #91baff;
+  outline-offset: 2px;
+}
+
 .map-toolbar h2,
 .drawer-heading h2 {
   margin: 0;
@@ -212,20 +256,59 @@ h1 {
 }
 
 .map-canvas-wrap {
+  position: relative;
+  height: clamp(20rem, 62vh, 44rem);
   min-height: 20rem;
-  flex: 1;
+  flex: 0 0 auto;
 }
 
-.lunar-map {
+.lunar-map,
+.lunar-globe {
   display: block;
   width: 100%;
   height: 100%;
+}
+
+.lunar-map {
   cursor: grab;
   touch-action: none;
 }
 
-.lunar-map:active {
+.lunar-map:active,
+.lunar-globe:active {
   cursor: grabbing;
+}
+
+.lunar-globe {
+  cursor: grab;
+  touch-action: none;
+}
+
+.lunar-map[hidden],
+.lunar-globe[hidden] {
+  display: none;
+}
+
+.globe-status {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0.75rem;
+  left: 0.75rem;
+  width: fit-content;
+  max-width: calc(100% - 1.5rem);
+  margin: 0;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid #40516b;
+  border-radius: 0.55rem;
+  background: rgb(8 13 24 / 88%);
+  color: #d6deeb;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  pointer-events: none;
+}
+
+.globe-status[hidden] {
+  display: none;
 }
 
 .map-footer {
@@ -757,7 +840,8 @@ h1 {
   outline-offset: 2px;
 }
 
-.lunar-map.is-selecting {
+.lunar-map.is-selecting,
+.lunar-globe.is-selecting {
   cursor: crosshair;
 }
 
@@ -914,6 +998,12 @@ h1 {
 
   .map-toolbar {
     align-items: flex-start;
+  }
+
+  .map-toolbar-actions {
+    align-items: flex-end;
+    flex-direction: column;
+    gap: 0.55rem;
   }
 
   .scenario-toolbar {

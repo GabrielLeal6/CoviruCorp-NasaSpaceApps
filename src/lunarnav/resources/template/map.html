@@ -28,7 +28,27 @@
             <h2>Lunar surface</h2>
             <p>Longitude (X) and latitude (Y), in degrees</p>
           </div>
-          <span class="map-hint">Drag the map to explore</span>
+          <div class="map-toolbar-actions">
+            <div class="map-view-controls" role="group" aria-label="Map view">
+              <button
+                id="show-2d-map"
+                class="map-view-button is-active"
+                type="button"
+                aria-pressed="true"
+              >
+                2D map
+              </button>
+              <button
+                id="show-3d-globe"
+                class="map-view-button"
+                type="button"
+                aria-pressed="false"
+              >
+                3D terrain
+              </button>
+            </div>
+            <span class="map-hint">Drag to explore</span>
+          </div>
         </div>
         <div class="map-canvas-wrap">
           <canvas
@@ -39,6 +59,16 @@
           >
             Your browser does not support the interactive map.
           </canvas>
+          <canvas
+            id="lunar-globe"
+            class="lunar-globe"
+            aria-label="Interactive 3D lunar terrain model. Drag to rotate and scroll to zoom."
+            role="img"
+            hidden
+          >
+            Your browser does not support the 3D lunar terrain model.
+          </canvas>
+          <p id="globe-status" class="globe-status" role="status" aria-live="polite" hidden></p>
         </div>
         <p class="map-footer">
           Global LOLA base (NASA/PDS); grid and coordinates in lunar longitude and latitude.

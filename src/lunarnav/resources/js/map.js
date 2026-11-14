@@ -1,7 +1,15 @@
 import { requestApi } from "./api.js";
+import {
+  createLunarGlobe,
+  LUNAR_TEXTURE_CROP,
+} from "./lunar-globe.js";
 
 const canvas = document.querySelector("#lunar-map");
 const context = canvas.getContext("2d");
+const globeCanvas = document.querySelector("#lunar-globe");
+const globeStatus = document.querySelector("#globe-status");
+const show2dMapButton = document.querySelector("#show-2d-map");
+const show3dGlobeButton = document.querySelector("#show-3d-globe");
 const mapWrap = document.querySelector(".map-canvas-wrap");
 const lunarMapImage = new Image();
 const addLocationButton = document.querySelector("#open-location");
@@ -44,6 +52,8 @@ const mapStatus = document.querySelector("#map-status");
 const storageKey = "lunar-navigator.locations";
 const scenarioStorageKey = "lunar-navigator.scenarios";
 const lunarRadiusKm = 1737.4;
+const globeReadyMessage =
+  "Global LOLA DEM (~7.58 km per source pixel) sampled on a 0.5° mesh; vertical relief exaggerated 8x. Drag to rotate and scroll to zoom.";
 const presetSites = [
   {
     id: "site_01",
@@ -88,6 +98,7 @@ let activeTrigger = null;
 let pendingDeleteId = null;
 let selectingLocationOnMap = false;
 let dragMoved = false;
+let lunarGlobe = null;
 
 lunarMapImage.addEventListener("load", drawMap);
 lunarMapImage.addEventListener("error", () => {
@@ -747,10 +758,10 @@ function drawMap() {
   if (lunarMapImage.complete && lunarMapImage.naturalWidth > 0) {
     context.drawImage(
       lunarMapImage,
-      36,
-      46,
-      1470,
-      735,
+      LUNAR_TEXTURE_CROP.x,
+      LUNAR_TEXTURE_CROP.y,
+      LUNAR_TEXTURE_CROP.width,
+      LUNAR_TEXTURE_CROP.height,
       originX - 180 * pixelsPerDegree,
       originY - 90 * pixelsPerDegree,
       360 * pixelsPerDegree,
@@ -849,6 +860,47 @@ function drawMap() {
   });
 }
 
+function setMapView(view) {
+  const is3d = view === "3d";
+  canvas.hidden = is3d;
+  globeCanvas.hidden = !is3d;
+  globeStatus.hidden = !is3d;
+  show2dMapButton.classList.toggle("is-active", !is3d);
+  show2dMapButton.setAttribute("aria-pressed", String(!is3d));
+  show3dGlobeButton.classList.toggle("is-active", is3d);
+  show3dGlobeButton.setAttribute("aria-pressed", String(is3d));
+}
+
+show2dMapButton.addEventListener("click", () => {
+  setMapView("2d");
+});
+
+show3dGlobeButton.addEventListener("click", async () => {
+  setMapView("3d");
+  globeStatus.textContent = lunarGlobe
+    ? globeReadyMessage
+    : "Loading the global LOLA elevation model and aligned lunar map texture...";
+
+  if (lunarGlobe) {
+    lunarGlobe.setLocations(locations);
+    return;
+  }
+
+  show3dGlobeButton.disabled = true;
+  try {
+    lunarGlobe = await createLunarGlobe(globeCanvas);
+    lunarGlobe.setLocations(locations);
+    globeStatus.textContent = globeReadyMessage;
+  } catch (error) {
+    console.error("Could not load the 3D lunar terrain.", error);
+    setMapView("2d");
+    mapStatus.textContent =
+      `Could not load the 3D lunar terrain: ${error instanceof Error ? error.message : String(error)}`;
+  } finally {
+    show3dGlobeButton.disabled = false;
+  }
+});
+
 function resizeCanvas() {
   const bounds = mapWrap.getBoundingClientRect();
   const pixelRatio = window.devicePixelRatio || 1;
@@ -926,7 +978,7 @@ canvas.addEventListener("pointermove", (event) => {
     dragMoved = true;
   }
   originX = dragStart.originX + event.clientX - dragStart.pointerX;
-  originY = dragStart.originY + event.clientY - dragStart.pointerY;
+  originY = dragStart.originY - (event.clientY - dragStart.pointerY);
   drawMap();
 });
 
@@ -940,8 +992,18 @@ canvas.addEventListener("pointercancel", finishDragging);
 function cancelMapSelection() {
   selectingLocationOnMap = false;
   canvas.classList.remove("is-selecting");
+  globeCanvas.classList.remove("is-selecting");
   locationPickHelp.textContent =
     "Choose coordinates on the map or enter the values above.";
+}
+
+function usePickedCoordinates(latitude, longitude) {
+  locationLatitudeInput.value = latitude.toFixed(4);
+  locationLongitudeInput.value = longitude.toFixed(4);
+  cancelMapSelection();
+  mapStatus.textContent =
+    `Coordinates selected: latitude ${latitude.toFixed(4)}°, longitude ${longitude.toFixed(4)}°.`;
+  openDrawer(locationDrawer, addLocationButton, locationNameInput);
 }
 
 canvas.addEventListener("click", (event) => {
@@ -965,12 +1027,24 @@ canvas.addEventListener("click", (event) => {
 
   const latitude = (originY - y) / pixelsPerDegree;
   const longitude = (x - originX) / pixelsPerDegree;
-  locationLatitudeInput.value = latitude.toFixed(4);
-  locationLongitudeInput.value = longitude.toFixed(4);
-  cancelMapSelection();
-  mapStatus.textContent =
-    `Coordinates selected: latitude ${latitude.toFixed(4)}°, longitude ${longitude.toFixed(4)}°.`;
-  openDrawer(locationDrawer, addLocationButton, locationNameInput);
+  usePickedCoordinates(latitude, longitude);
+});
+
+globeCanvas.addEventListener("click", (event) => {
+  if (!selectingLocationOnMap) return;
+  if (!lunarGlobe) {
+    mapStatus.textContent = "Wait for the 3D terrain to finish loading, then select a point.";
+    return;
+  }
+
+  const coordinates = lunarGlobe.pickCoordinates(event.clientX, event.clientY);
+  if (coordinates === undefined) return;
+  if (coordinates === null) {
+    mapStatus.textContent = "Click on the visible lunar surface to choose a location.";
+    return;
+  }
+
+  usePickedCoordinates(coordinates.latitude, coordinates.longitude);
 });
 
 function openDrawer(drawer, trigger, firstInput) {
@@ -1014,12 +1088,13 @@ closeLocationButton.addEventListener("click", closeDrawer);
 selectLocationOnMapButton.addEventListener("click", () => {
   closeDrawer();
   selectingLocationOnMap = true;
-  canvas.classList.add("is-selecting");
+  const selectionCanvas = globeCanvas.hidden ? canvas : globeCanvas;
+  selectionCanvas.classList.add("is-selecting");
   locationPickHelp.textContent =
     "Click the map to choose coordinates. Press Esc to cancel.";
   mapStatus.textContent =
     "Select a position on the lunar surface by clicking the map.";
-  canvas.focus({ preventScroll: true });
+  selectionCanvas.focus({ preventScroll: true });
 });
 openComparisonButton.addEventListener("click", () => {
   updateLocationOptions();
@@ -1059,6 +1134,7 @@ locationForm.addEventListener("submit", (event) => {
   };
   locations.push(location);
   saveLocations();
+  lunarGlobe?.setLocations(locations);
   updateLocationOptions();
   drawMap();
   locationForm.reset();
@@ -1249,6 +1325,7 @@ confirmDeleteButton.addEventListener("click", () => {
 
   const [deletedLocation] = locations.splice(locationIndex, 1);
   const saved = saveLocations();
+  lunarGlobe?.setLocations(locations);
   updateLocationOptions();
   drawMap();
   comparisonResult.hidden = true;
