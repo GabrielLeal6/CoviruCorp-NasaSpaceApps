@@ -4,7 +4,7 @@ import csv
 import numpy as np
 import spiceypy as spice
 from astroquery.jplhorizons import Horizons
-from coordinates import body_altaz
+from .coordinates import body_altaz
 
 
 def validate_results(rows, tolerance_deg=0.5):
