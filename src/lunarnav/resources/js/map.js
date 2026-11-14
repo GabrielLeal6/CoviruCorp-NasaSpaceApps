@@ -1,3 +1,5 @@
+import { requestApi } from "./api.js";
+
 const canvas = document.querySelector("#lunar-map");
 const context = canvas.getContext("2d");
 const mapWrap = document.querySelector(".map-canvas-wrap");
@@ -42,6 +44,33 @@ const mapStatus = document.querySelector("#map-status");
 const storageKey = "lunar-navigator.locations";
 const scenarioStorageKey = "lunar-navigator.scenarios";
 const lunarRadiusKm = 1737.4;
+const presetSites = [
+  {
+    id: "site_01",
+    siteId: "site_01",
+    name: "Connecting Ridge (Candidate)",
+    latitude: -89.53,
+    longitude: -150.05,
+    color: "#ffcc70",
+  },
+  {
+    id: "site_02",
+    siteId: "site_02",
+    name: "Peak Near Shackleton (Candidate)",
+    latitude: -88.81,
+    longitude: 123.76,
+    color: "#70ccff",
+  },
+  {
+    id: "site_03",
+    siteId: "site_03",
+    name: "Malapert Massif (Candidate)",
+    latitude: -86,
+    longitude: 0,
+    color: "#a6ffcb",
+  },
+];
+const siteThreePreset = presetSites[2];
 const minimumZoomLevel = 1;
 const maximumZoomLevel = 8;
 let pixelsPerDegree = 2.5;
@@ -63,9 +92,9 @@ let dragMoved = false;
 lunarMapImage.addEventListener("load", drawMap);
 lunarMapImage.addEventListener("error", () => {
   mapStatus.textContent =
-    "Não foi possível carregar a imagem lunar. Verifique se lua-global.png está na pasta resources/lua.";
+    "Could not load the lunar map image. Check that moon-global.png is in the resources/moon folder.";
 });
-lunarMapImage.src = "../lua/lua-global.png";
+lunarMapImage.src = "../moon/moon-global.png";
 
 function isValidLocation(location) {
   return (
@@ -75,6 +104,7 @@ function isValidLocation(location) {
     typeof location.name === "string" &&
     location.name.trim().length > 0 &&
     location.name.length <= 40 &&
+    (location.siteId === undefined || typeof location.siteId === "string") &&
     Number.isFinite(location.latitude) &&
     location.latitude >= -90 &&
     location.latitude <= 90 &&
@@ -105,6 +135,41 @@ function isValidScenario(scenario) {
         scenario.delayDays <= 30)) &&
     validDate &&
     validTime
+  );
+}
+
+function isValidScenarioResult(result) {
+  const metrics = result?.metrics;
+  return (
+    result !== null &&
+    typeof result === "object" &&
+    typeof result.id === "string" &&
+    result.site !== null &&
+    typeof result.site === "object" &&
+    Number.isFinite(result.site.lat) &&
+    Number.isFinite(result.site.lon) &&
+    metrics !== null &&
+    typeof metrics === "object" &&
+    Number.isFinite(metrics.sun_illumination_pct) &&
+    Number.isFinite(metrics.earth_visibility_pct) &&
+    Number.isFinite(metrics.longest_dark_h) &&
+    Number.isFinite(metrics.longest_no_earth_h) &&
+    Array.isArray(metrics.sun_windows) &&
+    metrics.sun_windows.every(
+      (window) =>
+        window !== null &&
+        typeof window === "object" &&
+        Number.isFinite(window.hours),
+    ) &&
+    Array.isArray(metrics.earth_windows) &&
+    metrics.earth_windows.every(
+      (window) =>
+        window !== null &&
+        typeof window === "object" &&
+        Number.isFinite(window.hours),
+    ) &&
+    Array.isArray(result.warnings) &&
+    result.warnings.every((warning) => typeof warning === "string")
   );
 }
 
@@ -143,25 +208,45 @@ function loadScenarioState() {
       !parsedState.scenarios.every(isValidScenario) ||
       new Set(parsedState.scenarios.map((scenario) => scenario.id)).size !==
         parsedState.scenarios.length ||
-      typeof parsedState.resultsVisible !== "boolean"
+      typeof parsedState.resultsVisible !== "boolean" ||
+      (parsedState.results !== undefined &&
+        parsedState.results !== null &&
+        (!Array.isArray(parsedState.results) ||
+          !parsedState.results.every(isValidScenarioResult)))
     ) {
-      throw new TypeError("Os dados salvos dos cenários têm um formato inválido.");
+      throw new TypeError("The saved scenario data has an invalid format.");
     }
 
     return parsedState;
   } catch (error) {
-    console.error("Não foi possível carregar os cenários salvos.", error);
+    console.error("Could not load saved scenarios.", error);
     mapStatus.textContent =
-      "Não foi possível carregar os cenários salvos neste navegador.";
+      "Could not load saved scenarios in this browser.";
     return null;
   }
 }
 
 const savedScenarioState = loadScenarioState();
 const scenarios = savedScenarioState?.scenarios ?? [
-  { id: 1, locationId: "", date: "", time: "", delayDays: 0 },
-  { id: 2, locationId: "", date: "", time: "", delayDays: 0 },
+  { id: 1, locationId: presetSites[0].id, date: "", time: "", delayDays: 0 },
+  { id: 2, locationId: presetSites[1].id, date: "", time: "", delayDays: 0 },
+  { id: 3, locationId: siteThreePreset.id, date: "", time: "", delayDays: 0 },
 ];
+let scenarioListMigrated = false;
+while (scenarios.length < 3) {
+  const nextId = scenarios.reduce(
+    (highestId, scenario) => Math.max(highestId, scenario.id),
+    0,
+  ) + 1;
+  scenarios.push({
+    id: nextId,
+    locationId: siteThreePreset.id,
+    date: "",
+    time: "",
+    delayDays: 0,
+  });
+  scenarioListMigrated = true;
+}
 scenarios.forEach((scenario) => {
   scenario.delayDays ??= 0;
 });
@@ -170,26 +255,41 @@ let scenarioSequence = scenarios.reduce(
   0,
 );
 let scenarioResultsVisible = savedScenarioState?.resultsVisible ?? false;
+let scenarioResultsData = savedScenarioState?.results ?? null;
+if (scenarioListMigrated) {
+  scenarioResultsVisible = false;
+  scenarioResultsData = null;
+}
 
 function saveScenarioState() {
   try {
     localStorage.setItem(
       scenarioStorageKey,
-      JSON.stringify({ scenarios, resultsVisible: scenarioResultsVisible }),
+      JSON.stringify({
+        scenarios,
+        resultsVisible: scenarioResultsVisible,
+        results: scenarioResultsData,
+      }),
     );
     return true;
   } catch (error) {
-    console.error("Não foi possível salvar os cenários neste navegador.", error);
+    console.error("Could not save scenarios in this browser.", error);
     mapStatus.textContent =
-      "As alterações dos cenários não foram salvas; tente novamente neste navegador.";
+      "Scenario changes were not saved; try again in this browser.";
     return false;
   }
+}
+
+function invalidateScenarioResults() {
+  scenarioResultsVisible = false;
+  scenarioResultsData = null;
+  scenarioResults.hidden = true;
 }
 
 function loadLocations() {
   try {
     const savedLocations = localStorage.getItem(storageKey);
-    if (savedLocations === null) return [];
+    if (savedLocations === null) return presetSites.map((site) => ({ ...site }));
 
     const parsedLocations = JSON.parse(savedLocations);
     if (
@@ -202,6 +302,7 @@ function loadLocations() {
           typeof location.name === "string" &&
           location.name.trim().length > 0 &&
           location.name.length <= 40 &&
+          (location.siteId === undefined || typeof location.siteId === "string") &&
           Number.isFinite(location.latitude) &&
           location.latitude >= -180 &&
           location.latitude <= 180 &&
@@ -213,7 +314,7 @@ function loadLocations() {
               /^#[0-9a-f]{6}$/i.test(location.color))),
       )
     ) {
-      throw new TypeError("Os dados salvos das localizações têm um formato inválido.");
+      throw new TypeError("The saved location data has an invalid format.");
     }
 
     const normalizedLocations = parsedLocations.map((location) => ({
@@ -221,29 +322,52 @@ function loadLocations() {
       ...normalizeSelenographicCoordinates(location.latitude, location.longitude),
       color: location.color ?? "#ffcc70",
     }));
-    const needsMigration = normalizedLocations.some(
-      (location, index) =>
-        location.latitude !== parsedLocations[index].latitude ||
-        location.longitude !== parsedLocations[index].longitude ||
-        location.color !== parsedLocations[index].color,
-    );
+    for (const preset of presetSites) {
+      const presetIndex = normalizedLocations.findIndex(
+        (location) =>
+          location.id === preset.id || location.siteId === preset.siteId,
+      );
+      if (presetIndex === -1) {
+        normalizedLocations.push({ ...preset });
+        continue;
+      }
+
+      const existingPreset = normalizedLocations[presetIndex];
+      normalizedLocations[presetIndex] = {
+        ...existingPreset,
+        ...preset,
+        id: existingPreset.id,
+        color: existingPreset.color ?? preset.color,
+      };
+    }
+
+    const needsMigration =
+      normalizedLocations.length !== parsedLocations.length ||
+      normalizedLocations.some(
+        (location, index) =>
+          index >= parsedLocations.length ||
+          location.latitude !== parsedLocations[index].latitude ||
+          location.longitude !== parsedLocations[index].longitude ||
+          location.color !== parsedLocations[index].color ||
+          location.siteId !== parsedLocations[index].siteId,
+      );
 
     if (needsMigration) {
       try {
         localStorage.setItem(storageKey, JSON.stringify(normalizedLocations));
       } catch (error) {
-        console.error("Não foi possível salvar as coordenadas normalizadas.", error);
+        console.error("Could not save location presets or normalized coordinates.", error);
         mapStatus.textContent =
-          "Coordenadas antigas foram ajustadas nesta sessão, mas não puderam ser salvas no navegador.";
+          "Location presets or older coordinates were adjusted for this session but could not be saved in the browser.";
       }
     }
 
     return normalizedLocations;
   } catch (error) {
-    console.error("Não foi possível carregar as localizações salvas.", error);
+    console.error("Could not load saved locations.", error);
     mapStatus.textContent =
-      "Não foi possível carregar os locais salvos neste navegador.";
-    return [];
+      "Could not load saved locations in this browser.";
+    return presetSites.map((site) => ({ ...site }));
   }
 }
 
@@ -253,9 +377,9 @@ function saveLocations() {
     mapStatus.textContent = "";
     return true;
   } catch (error) {
-    console.error("Não foi possível salvar as localizações neste navegador.", error);
+    console.error("Could not save locations in this browser.", error);
     mapStatus.textContent =
-      "Localização adicionada somente nesta sessão; não foi possível salvá-la no navegador.";
+      "Location added for this session only; it could not be saved in the browser.";
     return false;
   }
 }
@@ -275,9 +399,13 @@ function updateLocationOptions() {
     deleteLocationSelect,
   ]) {
     const selectedValue = select.value;
-    select.replaceChildren(new Option("Selecione uma localização", ""));
+    select.replaceChildren(new Option("Select a location", ""));
 
-    locations.forEach((location) => {
+    const availableLocations =
+      select === deleteLocationSelect
+        ? locations.filter((location) => !location.siteId)
+        : locations;
+    availableLocations.forEach((location) => {
       const option = new Option(
         `${location.name} (${formatCoordinate(location.latitude)}, ${formatCoordinate(location.longitude)})`,
         location.id,
@@ -294,14 +422,15 @@ function updateLocationOptions() {
     locations.length < 2;
   comparisonHelp.textContent =
     locations.length < 2
-      ? "Adicione pelo menos duas localizações ao mapa para compará-las."
-      : "Escolha dois locais diferentes para ver as coordenadas e a distância aproximada entre eles.";
+      ? "Add at least two locations to the map to compare them."
+      : "Choose two different locations to see their coordinates and approximate distance.";
+  const deletableLocations = locations.filter((location) => !location.siteId);
   deleteForm.querySelector("button[type='submit']").disabled =
-    locations.length === 0;
+    deletableLocations.length === 0;
   deleteHelp.textContent =
-    locations.length === 0
-      ? "Não há localizações salvas para excluir."
-      : "Selecione o local que deseja remover.";
+    deletableLocations.length === 0
+      ? "There are no user-added locations to delete."
+      : "Select a user-added location to remove.";
   let scenarioChanged = false;
   scenarios.forEach((scenario) => {
     if (!locations.some((location) => location.id === scenario.locationId)) {
@@ -312,7 +441,7 @@ function updateLocationOptions() {
     }
   });
   if (scenarioChanged) {
-    scenarioResultsVisible = false;
+    invalidateScenarioResults();
     saveScenarioState();
   }
   renderScenarioCards();
@@ -339,16 +468,15 @@ function renderScenarioCards() {
     const header = document.createElement("div");
     header.className = "scenario-card-header";
     const title = document.createElement("h3");
-    title.textContent = `Cenário ${index + 1}`;
+    title.textContent = `Scenario ${index + 1}`;
     const removeButton = document.createElement("button");
     removeButton.className = "scenario-remove-button";
     removeButton.type = "button";
-    removeButton.textContent = "Remover";
-    removeButton.setAttribute("aria-label", `Remover cenário ${index + 1}`);
+    removeButton.textContent = "Remove";
+    removeButton.setAttribute("aria-label", `Remove scenario ${index + 1}`);
     removeButton.addEventListener("click", () => {
       scenarios.splice(index, 1);
-      scenarioResultsVisible = false;
-      scenarioResults.hidden = true;
+      invalidateScenarioResults();
       saveScenarioState();
       renderScenarioCards();
     });
@@ -360,11 +488,11 @@ function renderScenarioCards() {
     const siteId = `scenario-location-${scenario.id}`;
     const siteLabel = document.createElement("label");
     siteLabel.htmlFor = siteId;
-    siteLabel.textContent = "Localização";
+    siteLabel.textContent = "Location";
     const siteSelect = document.createElement("select");
     siteSelect.id = siteId;
     siteSelect.required = true;
-    siteSelect.add(new Option("Selecione uma localização", ""));
+    siteSelect.add(new Option("Select a location", ""));
     locations.forEach((location) => {
       siteSelect.add(
         new Option(
@@ -377,15 +505,14 @@ function renderScenarioCards() {
     siteSelect.disabled = locations.length === 0;
     siteSelect.addEventListener("change", () => {
       scenario.locationId = siteSelect.value;
-      scenarioResultsVisible = false;
-      scenarioResults.hidden = true;
+      invalidateScenarioResults();
       saveScenarioState();
     });
 
     const dateId = `scenario-date-${scenario.id}`;
     const dateLabel = document.createElement("label");
     dateLabel.htmlFor = dateId;
-    dateLabel.textContent = "Data";
+    dateLabel.textContent = "Date";
     const dateInput = document.createElement("input");
     dateInput.id = dateId;
     dateInput.type = "date";
@@ -393,21 +520,19 @@ function renderScenarioCards() {
     dateInput.value = scenario.date;
     dateInput.addEventListener("change", () => {
       scenario.date = dateInput.value;
-      scenarioResultsVisible = false;
-      scenarioResults.hidden = true;
+      invalidateScenarioResults();
       saveScenarioState();
     });
     dateInput.addEventListener("input", () => {
       scenario.date = dateInput.value;
-      scenarioResultsVisible = false;
-      scenarioResults.hidden = true;
+      invalidateScenarioResults();
       saveScenarioState();
     });
 
     const timeId = `scenario-time-${scenario.id}`;
     const timeLabel = document.createElement("label");
     timeLabel.htmlFor = timeId;
-    timeLabel.textContent = "Horário (UTC)";
+    timeLabel.textContent = "Time (UTC)";
     const timeInput = document.createElement("input");
     timeInput.id = timeId;
     timeInput.type = "time";
@@ -415,14 +540,12 @@ function renderScenarioCards() {
     timeInput.value = scenario.time;
     timeInput.addEventListener("change", () => {
       scenario.time = timeInput.value;
-      scenarioResultsVisible = false;
-      scenarioResults.hidden = true;
+      invalidateScenarioResults();
       saveScenarioState();
     });
     timeInput.addEventListener("input", () => {
       scenario.time = timeInput.value;
-      scenarioResultsVisible = false;
-      scenarioResults.hidden = true;
+      invalidateScenarioResults();
       saveScenarioState();
     });
 
@@ -431,12 +554,12 @@ function renderScenarioCards() {
     delayHeader.className = "scenario-delay-header";
     const delayLabel = document.createElement("label");
     delayLabel.htmlFor = delayId;
-    delayLabel.textContent = "Margem de atraso do lançamento";
+    delayLabel.textContent = "Launch delay (days)";
     const delayValue = document.createElement("output");
     delayValue.htmlFor = delayId;
     delayValue.className = "scenario-delay-value";
     const updateDelayValue = () => {
-      delayValue.textContent = `${scenario.delayDays} ${scenario.delayDays === 1 ? "dia" : "dias"}`;
+      delayValue.textContent = `${scenario.delayDays} ${scenario.delayDays === 1 ? "day" : "days"}`;
     };
     updateDelayValue();
     delayHeader.append(delayLabel, delayValue);
@@ -450,13 +573,12 @@ function renderScenarioCards() {
     delayInput.value = String(scenario.delayDays);
     delayInput.setAttribute(
       "aria-label",
-      `Margem de atraso do lançamento do cenário ${index + 1}, em dias`,
+      `Launch delay for scenario ${index + 1}, in days`,
     );
     delayInput.addEventListener("input", () => {
       scenario.delayDays = Number(delayInput.value);
       updateDelayValue();
-      scenarioResultsVisible = false;
-      scenarioResults.hidden = true;
+      invalidateScenarioResults();
       saveScenarioState();
     });
 
@@ -467,8 +589,8 @@ function renderScenarioCards() {
       document.createElement("span"),
       document.createElement("span"),
     );
-    delayScale.firstElementChild.textContent = "0 dias";
-    delayScale.lastElementChild.textContent = "30 dias";
+    delayScale.firstElementChild.textContent = "0 days";
+    delayScale.lastElementChild.textContent = "30 days";
 
     fields.append(
       siteLabel,
@@ -489,10 +611,10 @@ function renderScenarioCards() {
   compareScenariosButton.disabled = scenarios.length < 2;
   scenarioStatus.textContent =
     locations.length === 0
-      ? "Adicione locais ao mapa para configurar os cenários."
+      ? "Add locations to the map to configure scenarios."
       : scenarios.length < 2
-        ? "Configure pelo menos dois cenários para compará-los."
-        : "Escolha um local, uma data e um horário para cada cenário.";
+        ? "Configure at least two scenarios to compare them."
+        : "Choose a location, date, and time for each scenario.";
 }
 
 function renderComparison(first, second) {
@@ -533,56 +655,83 @@ function renderComparison(first, second) {
   document.querySelector("#result-longitude").textContent =
     `${longitudeDifference >= 0 ? "+" : ""}${formatCoordinate(longitudeDifference)}`;
   document.querySelector("#result-distance").textContent =
-    `${distanceKm.toLocaleString("pt-BR", { maximumFractionDigits: 2 })} km`;
+    `${distanceKm.toLocaleString("en-US", { maximumFractionDigits: 2 })} km`;
   comparisonResult.hidden = false;
 }
 
-function renderScenarioResults() {
+function formatWindowSummary(windows) {
+  const totalHours = windows.reduce((total, window) => total + window.hours, 0);
+  return `${windows.length} (${totalHours.toFixed(1)} h total)`;
+}
+
+function renderScenarioResults(results = scenarioResultsData) {
+  if (
+    !Array.isArray(results) ||
+    results.length !== scenarios.length ||
+    !results.every(isValidScenarioResult)
+  ) {
+    throw new TypeError("The API returned an invalid scenario comparison response.");
+  }
+
+  const resultsById = new Map(results.map((result) => [result.id, result]));
+  if (scenarios.some((scenario) => !resultsById.has(String(scenario.id)))) {
+    throw new TypeError("The API response does not match the requested scenarios.");
+  }
+
   scenarioMetrics.replaceChildren();
 
   scenarios.forEach((scenario, index) => {
     const location = locations.find(
       (item) => item.id === scenario.locationId,
     );
-    if (!location) return;
+    const result = resultsById.get(String(scenario.id));
+    if (!location || !result) {
+      throw new TypeError("A scenario result could not be matched to its location.");
+    }
+
     const card = document.createElement("article");
     card.className = "scenario-metric-card";
 
     const title = document.createElement("h4");
-    title.textContent = `Cenário ${index + 1}`;
+    title.textContent = `Scenario ${index + 1}`;
     const details = document.createElement("p");
     details.className = "scenario-metric-location";
     const plannedDate = new Date(`${scenario.date}T${scenario.time}:00Z`);
     plannedDate.setUTCDate(plannedDate.getUTCDate() + scenario.delayDays);
     const baseDateLabel = new Date(
       `${scenario.date}T${scenario.time}:00Z`,
-    ).toLocaleString("pt-BR", { timeZone: "UTC" });
-    const delayedDateLabel = plannedDate.toLocaleString("pt-BR", {
+    ).toLocaleString("en-US", { timeZone: "UTC" });
+    const delayedDateLabel = plannedDate.toLocaleString("en-US", {
       timeZone: "UTC",
     });
     details.textContent =
-      `${location.name} · Base: ${baseDateLabel} UTC · Atraso: ${scenario.delayDays} dias · Nova data: ${delayedDateLabel} UTC`;
+      `${location.name} · Base: ${baseDateLabel} UTC · Delay: ${scenario.delayDays} days · New date: ${delayedDateLabel} UTC`;
 
     const metrics = document.createElement("dl");
     metrics.className = "scenario-metric-list";
     [
-      "Elevação do Sol",
-      "Elevação da Terra",
-      "Horas de iluminação",
-      "Janelas de comunicação",
-    ].forEach((label) => {
+      ["Sun illumination", `${result.metrics.sun_illumination_pct.toFixed(1)}%`],
+      ["Earth visibility", `${result.metrics.earth_visibility_pct.toFixed(1)}%`],
+      ["Sun windows", formatWindowSummary(result.metrics.sun_windows)],
+      ["Communication windows", formatWindowSummary(result.metrics.earth_windows)],
+      ["Longest dark period", `${result.metrics.longest_dark_h.toFixed(1)} h`],
+      ["Longest communication blackout", `${result.metrics.longest_no_earth_h.toFixed(1)} h`],
+    ].forEach(([label, metricValue]) => {
       const row = document.createElement("div");
       const term = document.createElement("dt");
       term.textContent = label;
       const value = document.createElement("dd");
-      value.textContent = "—";
+      value.textContent = metricValue;
       row.append(term, value);
       metrics.append(row);
     });
 
     const status = document.createElement("p");
     status.className = "scenario-data-status";
-    status.textContent = "Aguardando conexão com dados de efemérides.";
+    status.textContent =
+      result.warnings.length > 0
+        ? `Mock API result. ${result.warnings.join(" ")}`
+        : "Mock API result.";
     card.append(title, details, metrics, status);
     scenarioMetrics.append(card);
   });
@@ -792,7 +941,7 @@ function cancelMapSelection() {
   selectingLocationOnMap = false;
   canvas.classList.remove("is-selecting");
   locationPickHelp.textContent =
-    "Escolha as coordenadas no mapa ou informe os valores acima.";
+    "Choose coordinates on the map or enter the values above.";
 }
 
 canvas.addEventListener("click", (event) => {
@@ -810,7 +959,7 @@ canvas.addEventListener("click", (event) => {
   const mapBottom = originY + 90 * pixelsPerDegree;
 
   if (x < mapLeft || x > mapRight || y < mapTop || y > mapBottom) {
-    mapStatus.textContent = "Clique dentro da área do mapa lunar para escolher o local.";
+    mapStatus.textContent = "Click inside the lunar map area to choose a location.";
     return;
   }
 
@@ -820,7 +969,7 @@ canvas.addEventListener("click", (event) => {
   locationLongitudeInput.value = longitude.toFixed(4);
   cancelMapSelection();
   mapStatus.textContent =
-    `Coordenadas selecionadas: latitude ${latitude.toFixed(4)}°, longitude ${longitude.toFixed(4)}°.`;
+    `Coordinates selected: latitude ${latitude.toFixed(4)}°, longitude ${longitude.toFixed(4)}°.`;
   openDrawer(locationDrawer, addLocationButton, locationNameInput);
 });
 
@@ -867,9 +1016,9 @@ selectLocationOnMapButton.addEventListener("click", () => {
   selectingLocationOnMap = true;
   canvas.classList.add("is-selecting");
   locationPickHelp.textContent =
-    "Clique no mapa para escolher as coordenadas. Pressione Esc para cancelar.";
+    "Click the map to choose coordinates. Press Esc to cancel.";
   mapStatus.textContent =
-    "Selecione uma posição na superfície lunar clicando no mapa.";
+    "Select a position on the lunar surface by clicking the map.";
   canvas.focus({ preventScroll: true });
 });
 openComparisonButton.addEventListener("click", () => {
@@ -891,7 +1040,7 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && activeDrawer) closeDrawer();
   else if (event.key === "Escape" && selectingLocationOnMap) {
     cancelMapSelection();
-    mapStatus.textContent = "Seleção no mapa cancelada.";
+    mapStatus.textContent = "Map selection canceled.";
     addLocationButton.focus();
   }
 });
@@ -927,12 +1076,12 @@ comparisonForm.addEventListener("submit", (event) => {
     (location) => location.id === secondLocationSelect.value,
   );
   if (!first || !second) {
-    mapStatus.textContent = "Selecione duas localizações válidas para comparar.";
+    mapStatus.textContent = "Select two valid locations to compare.";
     return;
   }
   if (first.id === second.id) {
     secondLocationSelect.setCustomValidity(
-      "Escolha uma localização diferente da primeira.",
+      "Choose a location different from the first one.",
     );
     secondLocationSelect.reportValidity();
     return;
@@ -949,8 +1098,7 @@ secondLocationSelect.addEventListener("change", () => {
 addScenarioButton.addEventListener("click", () => {
   if (scenarios.length >= 4) return;
   scenarios.push(createScenario());
-  scenarioResultsVisible = false;
-  scenarioResults.hidden = true;
+  invalidateScenarioResults();
   saveScenarioState();
   renderScenarioCards();
   scenarioList.lastElementChild
@@ -958,9 +1106,53 @@ addScenarioButton.addEventListener("click", () => {
     .focus();
 });
 
-compareScenariosButton.addEventListener("click", () => {
+function buildScenarioComparisonRequest() {
+  return scenarios.map((scenario) => {
+    const location = locations.find(
+      (item) => item.id === scenario.locationId,
+    );
+    if (!location) {
+      throw new Error(`Location for scenario ${scenario.id} was not found.`);
+    }
+
+    const startDate = new Date(`${scenario.date}T${scenario.time}:00Z`);
+    if (!Number.isFinite(startDate.getTime())) {
+      throw new Error(`Date or time for scenario ${scenario.id} is invalid.`);
+    }
+    startDate.setUTCDate(startDate.getUTCDate() + scenario.delayDays);
+
+    return {
+      id: String(scenario.id),
+      site: location.siteId
+        ? { site_id: location.siteId }
+        : { lat: location.latitude, lon: location.longitude },
+      start_utc: startDate.toISOString(),
+    };
+  });
+}
+
+function getStoredScenarioResults(results) {
+  return results.map((result) => ({
+    id: result.id,
+    site: {
+      lat: result.site.lat,
+      lon: result.site.lon,
+    },
+    metrics: {
+      sun_illumination_pct: result.metrics.sun_illumination_pct,
+      earth_visibility_pct: result.metrics.earth_visibility_pct,
+      longest_dark_h: result.metrics.longest_dark_h,
+      longest_no_earth_h: result.metrics.longest_no_earth_h,
+      sun_windows: result.metrics.sun_windows.map(({ hours }) => ({ hours })),
+      earth_windows: result.metrics.earth_windows.map(({ hours }) => ({ hours })),
+    },
+    warnings: result.warnings,
+  }));
+}
+
+compareScenariosButton.addEventListener("click", async () => {
   if (scenarios.length < 2) {
-    scenarioStatus.textContent = "Configure pelo menos dois cenários para compará-los.";
+    scenarioStatus.textContent = "Configure at least two scenarios to compare them.";
     return;
   }
 
@@ -975,17 +1167,53 @@ compareScenariosButton.addEventListener("click", () => {
             : null;
     if (missingField) {
       scenarioStatus.textContent =
-        `Preencha a localização, a data e o horário do cenário ${index + 1}.`;
+        `Complete the location, date, and time for scenario ${index + 1}.`;
       scenarioList.children[index].querySelector(missingField).focus();
       return;
     }
   }
 
-  renderScenarioResults();
-  scenarioResultsVisible = true;
-  saveScenarioState();
-  scenarioStatus.textContent =
-    "Parâmetros selecionados. Métricas aguardam uma fonte de efemérides.";
+  const requestState = JSON.stringify({ scenarios, locations });
+  invalidateScenarioResults();
+  compareScenariosButton.disabled = true;
+  addScenarioButton.disabled = true;
+  scenarioList.inert = true;
+  scenarioStatus.textContent = "Analyzing scenarios with the mock API...";
+
+  try {
+    const response = await requestApi("/api/v1/compare", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        scenarios: buildScenarioComparisonRequest(),
+      }),
+    });
+
+    if (requestState !== JSON.stringify({ scenarios, locations })) {
+      scenarioStatus.textContent =
+        "Scenario inputs changed during analysis. Compare them again.";
+      return;
+    }
+
+    if (!Array.isArray(response.scenarios)) {
+      throw new TypeError("The API returned an invalid scenario comparison response.");
+    }
+    scenarioResultsData = getStoredScenarioResults(response.scenarios);
+    renderScenarioResults(scenarioResultsData);
+    scenarioResultsVisible = true;
+    saveScenarioState();
+    scenarioStatus.textContent = "Scenario analysis completed using mock API data.";
+  } catch (error) {
+    console.error("Scenario comparison request failed.", error);
+    invalidateScenarioResults();
+    saveScenarioState();
+    scenarioStatus.textContent =
+      `Scenario comparison failed: ${error instanceof Error ? error.message : String(error)}`;
+  } finally {
+    scenarioList.inert = false;
+    addScenarioButton.disabled = scenarios.length >= 4;
+    compareScenariosButton.disabled = scenarios.length < 2;
+  }
 });
 
 deleteForm.addEventListener("submit", (event) => {
@@ -995,8 +1223,8 @@ deleteForm.addEventListener("submit", (event) => {
   const selectedLocation = locations.find(
     (location) => location.id === deleteLocationSelect.value,
   );
-  if (!selectedLocation) {
-    mapStatus.textContent = "Selecione uma localização válida para excluir.";
+  if (!selectedLocation || selectedLocation.siteId) {
+    mapStatus.textContent = "Select a valid location to delete.";
     return;
   }
 
@@ -1013,7 +1241,7 @@ confirmDeleteButton.addEventListener("click", () => {
   );
   if (locationIndex === -1) {
     mapStatus.textContent =
-      "A localização selecionada não foi encontrada. Atualize a lista e tente novamente.";
+      "The selected location was not found. Refresh the list and try again.";
     deleteConfirmation.hidden = true;
     pendingDeleteId = null;
     return;
@@ -1028,8 +1256,8 @@ confirmDeleteButton.addEventListener("click", () => {
   deleteConfirmation.hidden = true;
   pendingDeleteId = null;
   mapStatus.textContent = saved
-    ? `Localização "${deletedLocation.name}" excluída.`
-    : `Localização "${deletedLocation.name}" removida desta sessão, mas não foi possível salvar a alteração.`;
+    ? `Location "${deletedLocation.name}" deleted.`
+    : `Location "${deletedLocation.name}" removed for this session, but the change could not be saved.`;
   closeDrawer();
 });
 
@@ -1041,8 +1269,10 @@ cancelDeleteButton.addEventListener("click", () => {
 
 new ResizeObserver(resizeCanvas).observe(mapWrap);
 updateLocationOptions();
+if (scenarioListMigrated) saveScenarioState();
 if (
   scenarioResultsVisible &&
+  Array.isArray(scenarioResultsData) &&
   scenarios.length >= 2 &&
   scenarios.every(
     (scenario) =>
@@ -1052,9 +1282,15 @@ if (
       locations.some((location) => location.id === scenario.locationId),
   )
 ) {
-  renderScenarioResults();
+  try {
+    renderScenarioResults();
+  } catch (error) {
+    console.error("Could not restore saved scenario results.", error);
+    invalidateScenarioResults();
+    scenarioStatus.textContent =
+      `Could not restore saved scenario results: ${error.message}`;
+  }
 } else {
-  scenarioResultsVisible = false;
-  scenarioResults.hidden = true;
+  invalidateScenarioResults();
 }
 drawMap();

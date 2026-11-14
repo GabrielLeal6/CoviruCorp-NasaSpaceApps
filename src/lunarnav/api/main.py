@@ -2,11 +2,13 @@ from datetime import datetime, timedelta, timezone
 import math
 from pathlib import Path
 import time
+from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 import yaml
 
@@ -25,6 +27,7 @@ DATASETS_PATH = str(REPO_ROOT / "datasets.yaml")
 SITES_PATH = REPO_ROOT / "sites.yaml"
 
 app = FastAPI(title="Lunar Landing Site Navigator API", version="0.1.0")
+RESOURCES_DIR = Path(__file__).resolve().parents[1] / "resources"
 
 app.add_middleware(
     CORSMiddleware,
@@ -348,3 +351,11 @@ def compare_scenarios(req: CompareRequest) -> dict[str, Any]:
             "computed_ms": elapsed_ms,
         },
     }
+
+
+@app.api_route("/", methods=["GET", "HEAD"], include_in_schema=False)
+def serve_frontend() -> FileResponse:
+    return FileResponse(RESOURCES_DIR / "template" / "index.html")
+
+
+app.mount("/", StaticFiles(directory=RESOURCES_DIR, html=True), name="frontend")
