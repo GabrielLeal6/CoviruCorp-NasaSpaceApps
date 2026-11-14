@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Explore coordenadas e locais de interesse na superfície lunar."
+    />
+    <title>Navegador Lunar | Mapa</title>
+    <link rel="stylesheet" href="../css/style.css" />
+    <script src="../js/principal.js" defer></script>
+  </head>
+  <body class="map-page">
+    <main class="map-app">
+      <header class="map-header">
+        <a class="exit-button" href="index.html">Sair</a>
+        <div class="map-heading">
+          <p class="eyebrow">NASA Space Apps Challenge 2026</p>
+          <h1>Mapa lunar</h1>
+        </div>
+        <p class="map-subtitle">Plano de coordenadas selenográficas</p>
+      </header>
+
+      <section class="map-workspace" aria-label="Mapa interativo">
+        <div class="map-toolbar">
+          <div>
+            <h2>Superfície lunar</h2>
+            <p>Longitude (X) e latitude (Y), em graus</p>
+          </div>
+          <span class="map-hint">Arraste o mapa para explorar</span>
+        </div>
+        <div class="map-canvas-wrap">
+          <canvas
+            id="lunar-map"
+            class="lunar-map"
+            aria-label="Plano cartesiano de coordenadas lunares. Arraste para mover o mapa."
+            role="img"
+          >
+            Seu navegador não oferece suporte ao mapa interativo.
+          </canvas>
+        </div>
+        <p class="map-footer">
+          Base global LOLA (NASA/PDS); grade e coordenadas em longitude e latitude lunares.
+        </p>
+      </section>
+
+      <div class="map-actions" aria-label="Ações do mapa">
+        <button
+          id="open-location"
+          class="location-tab"
+          type="button"
+          aria-controls="location-drawer"
+          aria-expanded="false"
+        >
+          <span aria-hidden="true">＋</span>
+          <span>Adicionar nova localização</span>
+        </button>
+        <button
+          id="open-comparison"
+          class="location-tab comparison-tab"
+          type="button"
+          aria-controls="comparison-drawer"
+          aria-expanded="false"
+        >
+          <span aria-hidden="true">⇄</span>
+          <span>Comparar localização</span>
+        </button>
+        <button
+          id="open-delete"
+          class="location-tab delete-tab"
+          type="button"
+          aria-controls="delete-drawer"
+          aria-expanded="false"
+        >
+          <span aria-hidden="true">−</span>
+          <span>Excluir local</span>
+        </button>
+      </div>
+
+      <section class="scenario-dashboard" aria-labelledby="scenario-title">
+        <div class="scenario-toolbar">
+          <div>
+            <p class="eyebrow">Planejamento de missão</p>
+            <h2 id="scenario-title">Comparação de cenários</h2>
+            <p>
+            Compare diferentes locais, datas e margens de atraso. As métricas
+            astronômicas serão exibidas quando uma fonte de efemérides for conectada.
+            </p>
+          </div>
+          <button id="add-scenario" class="scenario-add-button" type="button">
+            Adicionar cenário
+          </button>
+        </div>
+
+        <div id="scenario-list" class="scenario-list"></div>
+        <p id="scenario-status" class="scenario-status" role="status" aria-live="polite">
+          Adicione locais ao mapa para configurar os cenários.
+        </p>
+        <button id="compare-scenarios" class="submit-location scenario-compare-button" type="button">
+          Comparar cenários
+        </button>
+
+        <section
+          id="scenario-results"
+          class="scenario-results"
+          aria-labelledby="scenario-results-title"
+          aria-live="polite"
+          hidden
+        >
+          <h3 id="scenario-results-title">Resumo dos cenários</h3>
+          <div id="scenario-metrics" class="scenario-metrics"></div>
+          <div class="timeline-placeholder">
+            <h4>Linha do tempo de iluminação e comunicação</h4>
+            <p>
+              O gráfico será preenchido quando os dados do Sol e da Terra
+              estiverem disponíveis.
+            </p>
+          </div>
+        </section>
+      </section>
+
+      <p id="map-status" class="map-status" role="status" aria-live="polite"></p>
+
+      <div id="drawer-backdrop" class="drawer-backdrop" hidden></div>
+      <aside
+        id="location-drawer"
+        class="location-drawer side-drawer"
+        aria-labelledby="drawer-title"
+        aria-hidden="true"
+        inert
+      >
+        <div class="drawer-heading">
+          <div>
+            <p class="eyebrow">Ponto de interesse</p>
+            <h2 id="drawer-title">Nova localização</h2>
+          </div>
+          <button
+            id="close-location"
+            class="icon-button"
+            type="button"
+            aria-label="Fechar painel"
+          >
+            ×
+          </button>
+        </div>
+
+        <form id="location-form" class="location-form">
+          <label for="location-name">Nome da localização</label>
+          <input
+            id="location-name"
+            name="name"
+            type="text"
+            placeholder="Ex.: Polo Sul"
+            maxlength="40"
+            required
+          />
+
+          <label for="location-latitude">Latitude (°)</label>
+          <input
+            id="location-latitude"
+            name="latitude"
+            type="number"
+            min="-90"
+            max="90"
+            step="any"
+            placeholder="-90 a 90"
+            required
+          />
+
+          <label for="location-longitude">Longitude (°)</label>
+          <input
+            id="location-longitude"
+            name="longitude"
+            type="number"
+            min="-180"
+            max="180"
+            step="any"
+            placeholder="-180 a 180"
+            required
+          />
+
+          <button id="select-location-on-map" class="map-pick-button" type="button">
+            Selecionar no mapa
+          </button>
+          <p id="location-pick-help" class="comparison-note" role="status">
+            Escolha as coordenadas no mapa ou informe os valores acima.
+          </p>
+
+          <div class="location-color-field">
+            <label for="location-color">Cor da localização</label>
+            <input
+              id="location-color"
+              name="color"
+              type="color"
+              value="#ffcc70"
+              aria-label="Escolher cor do marcador"
+            />
+          </div>
+
+          <button class="submit-location" type="submit">Adicionar ao mapa</button>
+        </form>
+      </aside>
+
+      <aside
+        id="comparison-drawer"
+        class="location-drawer side-drawer"
+        aria-labelledby="comparison-title"
+        aria-hidden="true"
+        inert
+      >
+        <div class="drawer-heading">
+          <div>
+            <p class="eyebrow">Análise de locais</p>
+            <h2 id="comparison-title">Comparar localização</h2>
+          </div>
+          <button
+            id="close-comparison"
+            class="icon-button"
+            type="button"
+            aria-label="Fechar painel"
+          >
+            ×
+          </button>
+        </div>
+
+        <form id="comparison-form" class="location-form">
+          <label for="comparison-first">Primeira localização</label>
+          <select id="comparison-first" name="first" required>
+            <option value="">Selecione uma localização</option>
+          </select>
+
+          <label for="comparison-second">Segunda localização</label>
+          <select id="comparison-second" name="second" required>
+            <option value="">Selecione uma localização</option>
+          </select>
+
+          <p id="comparison-help" class="comparison-note" role="status"></p>
+          <button class="submit-location" type="submit">Comparar locais</button>
+        </form>
+
+        <section
+          id="comparison-result"
+          class="comparison-result"
+          aria-labelledby="comparison-result-title"
+          aria-live="polite"
+          hidden
+        >
+          <h3 id="comparison-result-title">Resultado da comparação</h3>
+          <dl>
+            <div>
+              <dt>Primeiro local</dt>
+              <dd id="result-first"></dd>
+            </div>
+            <div>
+              <dt>Segundo local</dt>
+              <dd id="result-second"></dd>
+            </div>
+            <div>
+              <dt>Diferença de latitude</dt>
+              <dd id="result-latitude"></dd>
+            </div>
+            <div>
+              <dt>Diferença de longitude</dt>
+              <dd id="result-longitude"></dd>
+            </div>
+            <div class="distance-result">
+              <dt>Distância aproximada na superfície lunar</dt>
+              <dd id="result-distance"></dd>
+            </div>
+          </dl>
+          <p class="comparison-note">
+            Estimativa em linha reta sobre uma Lua esférica, sem considerar o relevo.
+          </p>
+        </section>
+      </aside>
+
+      <aside
+        id="delete-drawer"
+        class="location-drawer side-drawer"
+        aria-labelledby="delete-title"
+        aria-hidden="true"
+        inert
+      >
+        <div class="drawer-heading">
+          <div>
+            <p class="eyebrow">Gerenciar locais</p>
+            <h2 id="delete-title">Excluir localização</h2>
+          </div>
+          <button
+            id="close-delete"
+            class="icon-button"
+            type="button"
+            aria-label="Fechar painel"
+          >
+            ×
+          </button>
+        </div>
+
+        <form id="delete-form" class="location-form">
+          <label for="delete-location">Localização para excluir</label>
+          <select id="delete-location" name="location" required>
+            <option value="">Selecione uma localização</option>
+          </select>
+          <p id="delete-help" class="comparison-note" role="status"></p>
+          <button class="submit-location" type="submit">Continuar</button>
+        </form>
+
+        <section
+          id="delete-confirmation"
+          class="delete-confirmation"
+          aria-labelledby="delete-confirmation-title"
+          hidden
+        >
+          <h3 id="delete-confirmation-title">Confirme a exclusão</h3>
+          <p id="delete-summary"></p>
+          <p class="comparison-note">
+            Essa ação remove o local salvo neste navegador e não pode ser desfeita.
+          </p>
+          <button id="confirm-delete" class="delete-location-button" type="button">
+            Excluir definitivamente
+          </button>
+          <button id="cancel-delete" class="cancel-delete-button" type="button">
+            Manter localização
+          </button>
+        </section>
+      </aside>
+    </main>
+  </body>
+</html>
