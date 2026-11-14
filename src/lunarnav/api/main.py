@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 import math
+from pathlib import Path
 import time
 from typing import Any, Optional
 
@@ -7,10 +8,11 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+import yaml
 
+from lunarnav.catalog import coverage_check, list_datasets
 from lunarnav.conventions import (
     BODY_FIXED_FRAME,
-    CURATED_SITES,
     DEFAULT_AZ_STEP_DEG,
     DEFAULT_MAX_RANGE_KM,
     DEFAULT_OBS_HEIGHT_M,
@@ -18,9 +20,12 @@ from lunarnav.conventions import (
     DEFAULT_WINDOW_HOURS,
 )
 
-app = FastAPI(title="Lunar Landing Site Navigator API", version="0.1.0-mock")
+REPO_ROOT = Path(__file__).resolve().parents[3]
+DATASETS_PATH = str(REPO_ROOT / "datasets.yaml")
+SITES_PATH = REPO_ROOT / "sites.yaml"
 
-# Allow Vite dev server (and local network testing)
+app = FastAPI(title="Lunar Landing Site Navigator API", version="0.1.0")
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -83,42 +88,82 @@ class HorizonRequest(BaseModel):
     max_range_km: float = DEFAULT_MAX_RANGE_KM
 
 
-# --- Deterministic Mock Generators ---
-def _resolve_site(site: SiteSelector) -> tuple[float, float, str, list[str]]:
-    warnings: list[str] = []
-    if site.site_id:
-        if site.site_id not in CURATED_SITES:
-            raise APIError(422, "INVALID_INPUT", f"Unknown site_id '{site.site_id}'.", {"site_id": site.site_id})
-        s = CURATED_SITES[site.site_id]
-        return s["lat"], s["lon"], "LDEM_80S_20MPP_ADJ", warnings
+# --- Helpers wired to Member 1's catalog & sites.yaml ---
+def _load_sites() -> dict[str, dict[str, Any]]:
+    if not SITES_PATH.exists():
+        return {}
+    raw = yaml.safe_load(SITES_PATH.read_text(encoding="utf-8")) or {}
+    items = raw.get("sites", raw) if isinstance(raw, dict) else raw
+    if isinstance(items, list):
+        return {s["id"]: s for s in items if isinstance(s, dict) and "id" in s}
+    if isinstance(items, dict):
+        return items
+    return {}
 
-    if site.lat is None or site.lon is None:
+
+def _resolve_site(site: SiteSelector, max_range_km: float = DEFAULT_MAX_RANGE_KM) -> dict[str, Any]:
+    sites = _load_sites()
+
+    if site.site_id:
+        if site.site_id not in sites:
+            raise APIError(422, "INVALID_INPUT", f"Unknown site_id '{site.site_id}'.", {"site_id": site.site_id})
+        s = sites[site.site_id]
+        lat, lon = float(s["lat"]), float(s["lon"])
+    elif site.lat is not None and site.lon is not None:
+        lat, lon = site.lat, site.lon
+    else:
         raise APIError(422, "INVALID_INPUT", "Provide either 'site_id' or both 'lat' and 'lon'.")
 
-    if site.lat > -80.0:
+    try:
+        cov = coverage_check(lat, lon, max_range_km=max_range_km, path=DATASETS_PATH)
+    except FileNotFoundError as exc:
+        raise APIError(503, "DATASET_UNAVAILABLE", "datasets.yaml not found on server.") from exc
+
+    if not cov.covered:
         raise APIError(
             422,
-            "COORD_OUT_OF_COVERAGE",
-            "Site is outside the loaded south polar DEM (-80 deg max latitude).",
-            {"lat": site.lat, "lon": site.lon, "dem_min_lat": -80.0},
+            cov.reason or "COORD_OUT_OF_COVERAGE",
+            "Site is outside the loaded DEM coverage.",
+            {"lat": lat, "lon": lon, "dem_min_lat": -80.0},
         )
 
-    warnings.append("Custom coordinate evaluated using reduced-resolution 80 m DEM (mock).")
-    return site.lat, site.lon, "LDEM_80S_80MPP_ADJ", warnings
+    warnings: list[str] = []
+    if cov.truncated:
+        warnings.append(f"Horizon truncated: {max_range_km} km ray-march extends past DEM boundary.")
+    if "40MPP" in cov.dem_source or "80MPP" in cov.dem_source:
+        warnings.append(f"Evaluated using reduced-resolution DEM ({cov.dem_source}).")
+
+    return {
+        "lat": lat,
+        "lon": lon,
+        "dem_source": cov.dem_source,
+        "horizon_truncated": cov.truncated,
+        "warnings": warnings,
+    }
 
 
+# --- Mock Horizon & Ephemeris (to be swapped for Modules 4 & 5) ---
 def _mock_horizon(lat: float, lon: float, az_step_deg: float) -> list[float]:
     n = int(round(360.0 / az_step_deg))
     phase = math.radians(lon)
     amp = 1.2 + (abs(lat + 90.0) * 0.15)
     return [
-        round(max(-1.5, amp * math.sin(2 * math.radians(i * az_step_deg) + phase) + 0.6 * math.cos(5 * math.radians(i * az_step_deg))), 3)
+        round(
+            max(
+                -1.5,
+                amp * math.sin(2 * math.radians(i * az_step_deg) + phase)
+                + 0.6 * math.cos(5 * math.radians(i * az_step_deg)),
+            ),
+            3,
+        )
         for i in range(n)
     ]
 
 
 def _build_scenario_result(req: ScenarioRequest, opts: AnalysisOptions) -> dict[str, Any]:
-    lat, lon, dem_source, warnings = _resolve_site(req.site)
+    resolved = _resolve_site(req.site, max_range_km=opts.max_range_km)
+    lat, lon = resolved["lat"], resolved["lon"]
+
     try:
         start_dt = datetime.fromisoformat(req.start_utc.replace("Z", "+00:00")).astimezone(timezone.utc)
     except ValueError as exc:
@@ -136,7 +181,6 @@ def _build_scenario_result(req: ScenarioRequest, opts: AnalysisOptions) -> dict[
         t_utc.append(dt.strftime("%Y-%m-%dT%H:%M:%SZ"))
         days = (dt - datetime(2027, 3, 1, tzinfo=timezone.utc)).total_seconds() / 86400.0
 
-        # Synthetic lunar cycles (~29.53d synodic Sun, ~27.32d nodical Earth libration)
         s_az = (days * (360.0 / 29.53) + lon) % 360.0
         s_el = 1.45 * math.sin(2 * math.pi * days / 29.53)
         h_at_s = horizon_elev[int(s_az / opts.az_step_deg) % n_az]
@@ -167,8 +211,8 @@ def _build_scenario_result(req: ScenarioRequest, opts: AnalysisOptions) -> dict[
             "lat": lat,
             "lon": lon,
             "ground_height_m": 1234.5,
-            "dem_source": dem_source,
-            "horizon_truncated": False,
+            "dem_source": resolved["dem_source"],
+            "horizon_truncated": resolved["horizon_truncated"],
         },
         "horizon": {"az_step_deg": opts.az_step_deg, "elev_deg": horizon_elev},
         "series": {
@@ -180,54 +224,108 @@ def _build_scenario_result(req: ScenarioRequest, opts: AnalysisOptions) -> dict[
             "sun_illumination_pct": sun_pct,
             "earth_visibility_pct": earth_pct,
             "sun_windows": [
-                {"start": t_utc[0], "end": t_utc[min(epochs - 1, int(epochs * 0.4))], "hours": round(epochs * 0.4 * step_h, 1), "open_start": sun_vis[0], "open_end": False}
-            ] if any(sun_vis) else [],
+                {
+                    "start": t_utc[0],
+                    "end": t_utc[min(epochs - 1, int(epochs * 0.4))],
+                    "hours": round(epochs * 0.4 * step_h, 1),
+                    "open_start": sun_vis[0],
+                    "open_end": False,
+                }
+            ]
+            if any(sun_vis)
+            else [],
             "earth_windows": [
-                {"start": t_utc[0], "end": t_utc[min(epochs - 1, int(epochs * 0.5))], "hours": round(epochs * 0.5 * step_h, 1), "open_start": earth_vis[0], "open_end": False}
-            ] if any(earth_vis) else [],
+                {
+                    "start": t_utc[0],
+                    "end": t_utc[min(epochs - 1, int(epochs * 0.5))],
+                    "hours": round(epochs * 0.5 * step_h, 1),
+                    "open_start": earth_vis[0],
+                    "open_end": False,
+                }
+            ]
+            if any(earth_vis)
+            else [],
             "time_to_terrain_sunset_h": round(epochs * 0.4 * step_h, 1) if sun_vis[0] else None,
             "time_to_terrain_earthset_h": round(epochs * 0.5 * step_h, 1) if earth_vis[0] else None,
             "longest_dark_h": round((100.0 - sun_pct) / 100.0 * req.window_hours, 1),
             "longest_no_earth_h": round((100.0 - earth_pct) / 100.0 * req.window_hours, 1),
         },
-        "warnings": warnings,
+        "warnings": resolved["warnings"],
     }
 
 
 # --- 7 Endpoints (Section 6) ---
 @app.get("/api/v1/health")
 def health() -> dict[str, Any]:
-    return {"status": "ok", "mode": "mock", "frame": BODY_FIXED_FRAME, "kernels_loaded": False, "dem_loaded": False}
+    try:
+        datasets = list_datasets(DATASETS_PATH)
+        dem_loaded = len(datasets) > 0
+    except Exception:
+        dem_loaded = False
+
+    return {
+        "status": "ok",
+        "mode": "hybrid" if dem_loaded else "mock",
+        "frame": BODY_FIXED_FRAME,
+        "kernels_loaded": False,
+        "dem_loaded": dem_loaded,
+    }
 
 
 @app.get("/api/v1/datasets")
-def list_datasets() -> dict[str, Any]:
+def get_datasets() -> dict[str, Any]:
+    try:
+        datasets = list_datasets(DATASETS_PATH)
+    except FileNotFoundError as exc:
+        raise APIError(503, "DATASET_UNAVAILABLE", "datasets.yaml not found.") from exc
+
     return {
         "datasets": [
-            {"id": "LDEM_80S_20MPP_ADJ", "res_m": 20.0, "coverage_lat_max": -80.0, "priority": 1, "mock": True},
-            {"id": "LDEM_80S_80MPP_ADJ", "res_m": 80.0, "coverage_lat_max": -80.0, "priority": 2, "mock": True},
+            {
+                "id": d.id,
+                "path": d.path,
+                "format": d.format,
+                "resolution_m": d.resolution,
+                "priority": d.priority,
+                "bounds": list(d.bounds) if d.bounds else None,
+                "units": d.units,
+            }
+            for d in datasets
         ]
     }
 
 
 @app.get("/api/v1/sites")
-def list_sites() -> dict[str, Any]:
-    return {"sites": list(CURATED_SITES.values())}
+def get_sites() -> dict[str, Any]:
+    return {"sites": list(_load_sites().values())}
 
 
 @app.post("/api/v1/sites/validate")
 def validate_site(site: SiteSelector) -> dict[str, Any]:
-    lat, lon, dem_source, warnings = _resolve_site(site)
-    return {"valid": True, "lat": lat, "lon": lon, "dem_source": dem_source, "warnings": warnings}
+    resolved = _resolve_site(site)
+    return {
+        "valid": True,
+        "lat": resolved["lat"],
+        "lon": resolved["lon"],
+        "dem_source": resolved["dem_source"],
+        "horizon_truncated": resolved["horizon_truncated"],
+        "warnings": resolved["warnings"],
+    }
 
 
 @app.post("/api/v1/horizon")
 def get_horizon(req: HorizonRequest) -> dict[str, Any]:
-    lat, lon, dem_source, warnings = _resolve_site(req.site)
+    resolved = _resolve_site(req.site, max_range_km=req.max_range_km)
+    lat, lon = resolved["lat"], resolved["lon"]
     return {
-        "site": {"lat": lat, "lon": lon, "dem_source": dem_source, "horizon_truncated": False},
+        "site": {
+            "lat": lat,
+            "lon": lon,
+            "dem_source": resolved["dem_source"],
+            "horizon_truncated": resolved["horizon_truncated"],
+        },
         "horizon": {"az_step_deg": req.az_step_deg, "elev_deg": _mock_horizon(lat, lon, req.az_step_deg)},
-        "warnings": warnings,
+        "warnings": resolved["warnings"],
     }
 
 
@@ -244,7 +342,7 @@ def compare_scenarios(req: CompareRequest) -> dict[str, Any]:
     return {
         "scenarios": results,
         "meta": {
-            "engine_version": "0.1.0-mock",
+            "engine_version": "0.1.0",
             "kernels": ["naif0012.tls", "de440s.bsp", "moon_pa_de440_200625.bpc"],
             "frame": BODY_FIXED_FRAME,
             "computed_ms": elapsed_ms,

@@ -1,4 +1,8 @@
+numpy
+rasterio
+pyproj
+pyyaml
 fastapi
 uvicorn[standard]
 pydantic
-numpy
+pyyaml

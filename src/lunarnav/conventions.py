@@ -18,6 +18,11 @@ import numpy as np
 R_MOON_M: float = 1_737_400.0   # meters (LOLA south polar stereographic sphere)
 R_MOON_KM: float = 1_737.4      # kilometers (ephemeris code unit)
 BODY_FIXED_FRAME: str = "MOON_ME"
+R_MOON_M: float = 1_737_400.0   # meters (LOLA south polar stereographic sphere)
+R_MOON: float = R_MOON_M        # alias used by projection.py
+R_MOON_KM: float = 1_737.4      # kilometers (ephemeris code unit)
+BODY_FIXED_FRAME: str = "MOON_ME"
+FRAME: str = BODY_FIXED_FRAME   # alias used by synthetic.py and adapters.py
 
 # South polar stereographic CRS on the reference sphere, true scale at the pole.
 CRS = "+proj=stere +lat_0=-90 +lat_ts=-90 +lon_0=0 +R=1737400 +units=m +no_defs"

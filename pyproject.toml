@@ -15,6 +15,7 @@ dependencies = [
     "fastapi",
     "uvicorn[standard]",
     "pydantic",
+    "pyyaml",
 ]
 
 [tool.setuptools.packages.find]

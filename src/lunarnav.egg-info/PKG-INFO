@@ -1,8 +1,13 @@
 Metadata-Version: 2.4
 Name: lunarnav
 Version: 0.1.0
+Summary: Lunar terrain data layer (Member 1: Data Engineering)
 Requires-Python: >=3.11
+Requires-Dist: numpy
+Requires-Dist: rasterio
+Requires-Dist: pyproj
+Requires-Dist: pyyaml
 Requires-Dist: fastapi
 Requires-Dist: uvicorn[standard]
 Requires-Dist: pydantic
-Requires-Dist: numpy
+Requires-Dist: pyyaml
