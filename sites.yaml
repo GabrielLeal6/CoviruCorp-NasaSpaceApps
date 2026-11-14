@@ -1,0 +1,473 @@
+# sites.yaml — Lunar landing sites for the Lunar Landing Site Navigator
+#
+# Built from NASA NSSDCA and LROC (Arizona State University) tables, retrieved 2026-11-13.
+#
+# Coordinate conventions (match context.md):
+#   lat           planetocentric degrees, south negative
+#   lon           EAST-positive degrees in [-180, 180]
+#   lon_east_360  the same longitude as NASA publishes it (0..360 east)
+#   frame         MOON_ME (mean Earth / polar axis, DE421), the frame NASA states for these tables
+#   Precision: 0.001 degrees is about 30 m on the surface (NSSDCA note).
+#
+# Primary sources (NASA):
+#   Apollo:            https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_sites.html
+#                      (Wagner et al., Icarus 283, 92-103, 2017; Lunar Module coordinates used)
+#   Everything else:   https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_artifact_impacts.html
+#                      (table last updated 13 August 2025; it lists landers through 5 June 2025)
+#   LROC page for each site is listed where the NASA table links one.
+#
+# Coverage of the south polar DEMs (80 deg S to the pole, about 304 km from the pole):
+#   south_polar_dem.covered = false  -> outside the polar DEMs; the API must return COORD_OUT_OF_COVERAGE
+#                                       unless a non-polar DEM adapter is added (context.md, hazard 7)
+#   dist_from_pole_km is about (90 - |lat|) * 30.3 km. A site is fully covered for a given max_range when
+#   dist_from_pole_km + max_range_km <= 304.
+#
+# Verify before use:
+#   - Elevations come from the LROC 2016 table and the NASA IM-1 page. The reference surface is not stated in
+#     the text I retrieved. Check it before comparing with a DEM.
+#   - Landing outcomes are summarized from the NASA table's "Landing Type" column; read the LROC pages for detail.
+#   - This file is not a mission-grade dataset. Coordinates can be revised by newer LROC imaging.
+
+meta:
+  generated: "2026-11-13"
+  frame: MOON_ME
+  reference_sphere_radius_m: 1737400
+  nssdca_table_last_updated: "2025-08-13"
+  polar_dem_coverage:
+    lat_max_deg: -80.0
+    radius_km: 304
+  p0_candidates:
+    # The three P0 sites in the blueprint must be inside the south polar DEMs.
+    # Only two real landing sites qualify. The third is still to be chosen (see notes).
+    - im2
+    - im1
+  p0_notes: >-
+    IM-2 (84.79 S) is well inside coverage. IM-1 (80.13 S) sits about 299 km from the pole, right at the DEM
+    edge, so a 100 km horizon range will be truncated; keep max_range small or flag horizon_truncated.
+    Chang'e-7 is listed under planned_not_landed with low confidence. Three Artemis III candidates are now in
+    planned_not_landed (Malapert Massif, Peak Near Shackleton, Nobile Rim 1) as approximate [Verify] placeholders;
+    verify against the published region polygons before promoting one to the third P0 site.
+
+# ---------------------------------------------------------------------------
+# Crewed landings
+# ---------------------------------------------------------------------------
+sites:
+  - id: apollo11
+    name: Apollo 11 (Tranquility Base)
+    program: Apollo
+    category: crewed
+    landing_date_utc: "1969-07-20"
+    lat: 0.67416
+    lon: 23.47314
+    lon_east_360: 23.47314
+    outcome: crewed landing
+    coordinate_object: Lunar Module
+    coordinate_source: https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_sites.html
+    south_polar_dem: {covered: false}
+
+  - id: apollo12
+    name: Apollo 12 (Oceanus Procellarum)
+    program: Apollo
+    category: crewed
+    landing_date_utc: "1969-11-19"
+    lat: -3.0128
+    lon: -23.4219
+    lon_east_360: 336.5781
+    outcome: crewed landing
+    coordinate_object: Lunar Module
+    coordinate_source: https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_sites.html
+    south_polar_dem: {covered: false}
+
+  - id: apollo14
+    name: Apollo 14 (Fra Mauro)
+    program: Apollo
+    category: crewed
+    landing_date_utc: "1971-02-05"
+    lat: -3.64589
+    lon: -17.47194
+    lon_east_360: 342.52806
+    elevation_m: -1062        # LROC 2016 table; reference surface to verify
+    outcome: crewed landing
+    coordinate_object: Lunar Module
+    coordinate_source: https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_sites.html
+    south_polar_dem: {covered: false}
+
+  - id: apollo15
+    name: Apollo 15 (Hadley-Apennine)
+    program: Apollo
+    category: crewed
+    landing_date_utc: "1971-07-30"
+    lat: 26.13239
+    lon: 3.63330
+    lon_east_360: 3.63330
+    elevation_m: -1931        # LROC 2016 table; reference surface to verify
+    outcome: crewed landing
+    coordinate_object: Lunar Module
+    coordinate_source: https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_sites.html
+    south_polar_dem: {covered: false}
+    notes: Mountainous terrain nearby, a good validation case for terrain-aware visibility once a non-polar DEM exists.
+
+  - id: apollo16
+    name: Apollo 16 (Descartes Highlands)
+    program: Apollo
+    category: crewed
+    landing_date_utc: "1972-04-21"
+    lat: -8.9734
+    lon: 15.5011
+    lon_east_360: 15.5011
+    elevation_m: 8            # LROC 2016 table; reference surface to verify
+    outcome: crewed landing
+    coordinate_object: Lunar Module
+    coordinate_source: https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_sites.html
+    south_polar_dem: {covered: false}
+
+  - id: apollo17
+    name: Apollo 17 (Taurus-Littrow)
+    program: Apollo
+    category: crewed
+    landing_date_utc: "1972-12-11"
+    lat: 20.1911
+    lon: 30.7723
+    lon_east_360: 30.7723
+    elevation_m: -2626        # LROC 2016 table; reference surface to verify
+    outcome: crewed landing
+    coordinate_object: Lunar Module
+    coordinate_source: https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_sites.html
+    south_polar_dem: {covered: false}
+
+# ---------------------------------------------------------------------------
+# Surveyor soft landers (Surveyor 2 and 4 crashed with no confirmed site, so they are omitted)
+# ---------------------------------------------------------------------------
+  - id: surveyor1
+    name: Surveyor 1
+    program: Surveyor
+    category: robotic
+    landing_date_utc: "1966-06-02"
+    lat: -2.4745
+    lon: -43.3398
+    lon_east_360: 316.6602
+    elevation_m: -1889        # LROC 2016 table; reference surface to verify
+    outcome: soft landing
+    coordinate_source: https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_artifact_impacts.html
+    coordinate_source_lroc: http://www.lroc.asu.edu/featured_sites/lroc_features/Surveyor%201/feature_highlights
+    south_polar_dem: {covered: false}
+
+  - id: surveyor3
+    name: Surveyor 3
+    program: Surveyor
+    category: robotic
+    landing_date_utc: "1967-04-20"
+    lat: -3.0162
+    lon: -23.4180
+    lon_east_360: 336.5820
+    elevation_m: -1433        # LROC 2016 table; reference surface to verify
+    outcome: soft landing
+    coordinate_source: https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_artifact_impacts.html
+    coordinate_source_lroc: http://www.lroc.asu.edu/featured_sites/lroc_features/Surveyor%203/feature_highlights
+    south_polar_dem: {covered: false}
+    notes: Lies close to the Apollo 12 site.
+
+  - id: surveyor5
+    name: Surveyor 5
+    program: Surveyor
+    category: robotic
+    landing_date_utc: "1967-09-11"
+    lat: 1.4551
+    lon: 23.1943
+    lon_east_360: 23.1943
+    elevation_m: -2052        # LROC 2016 table; reference surface to verify
+    outcome: soft landing
+    coordinate_source: https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_artifact_impacts.html
+    coordinate_source_lroc: http://www.lroc.asu.edu/featured_sites/lroc_features/Surveyor%205/feature_highlights
+    south_polar_dem: {covered: false}
+
+  - id: surveyor6
+    name: Surveyor 6
+    program: Surveyor
+    category: robotic
+    landing_date_utc: "1967-11-10"
+    lat: 0.4742
+    lon: -1.4275
+    lon_east_360: 358.5725
+    elevation_m: -757         # LROC 2016 table; reference surface to verify
+    outcome: soft landing
+    coordinate_source: https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_artifact_impacts.html
+    coordinate_source_lroc: http://www.lroc.asu.edu/featured_sites/lroc_features/Surveyor%206/feature_highlights
+    south_polar_dem: {covered: false}
+
+  - id: surveyor7
+    name: Surveyor 7 (north of Tycho)
+    program: Surveyor
+    category: robotic
+    landing_date_utc: "1968-01-10"
+    lat: -40.9812
+    lon: -11.5127
+    lon_east_360: 348.4873
+    elevation_m: 81           # LROC 2016 table; reference surface to verify
+    outcome: soft landing
+    coordinate_source: https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_artifact_impacts.html
+    coordinate_source_lroc: http://www.lroc.asu.edu/featured_sites/lroc_features/Surveyor%207/feature_highlights
+    south_polar_dem: {covered: false}
+
+# ---------------------------------------------------------------------------
+# 21st-century landers (successful touchdowns, per the NASA table)
+# ---------------------------------------------------------------------------
+  - id: change3
+    name: Chang'e 3
+    program: Chang'e (CNSA)
+    category: robotic
+    landing_date_utc: "2013-12-14"
+    lat: 44.1214
+    lon: -19.5117
+    lon_east_360: 340.4883
+    outcome: soft landing
+    coordinate_source: https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_artifact_impacts.html
+    coordinate_source_lroc: http://www.lroc.asu.edu/featured_sites/lroc_features/Chang'e%203%20Landing%20Site/feature_highlights
+    south_polar_dem: {covered: false}
+    notes: Yutu rover listed by NASA at 44.1208 N, 19.5122 W.
+
+  - id: change4
+    name: Chang'e 4 (Von Karman crater, far side)
+    program: Chang'e (CNSA)
+    category: robotic
+    landing_date_utc: "2019-01-03"
+    lat: -45.4561
+    lon: 177.5885
+    lon_east_360: 177.5885
+    outcome: soft landing
+    coordinate_source: https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_artifact_impacts.html
+    coordinate_source_lroc: http://lroc.sese.asu.edu/posts/1090
+    south_polar_dem: {covered: false}
+
+  - id: change5
+    name: Chang'e 5
+    program: Chang'e (CNSA)
+    category: robotic
+    landing_date_utc: "2020-12-01"
+    lat: 43.0576
+    lon: -51.9161
+    lon_east_360: 308.0839
+    outcome: soft landing
+    coordinate_source: https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_artifact_impacts.html
+    coordinate_source_lroc: http://lroc.sese.asu.edu/posts/1172
+    south_polar_dem: {covered: false}
+
+  - id: chandrayaan3
+    name: Chandrayaan-3 (Vikram lander)
+    program: Chandrayaan (ISRO)
+    category: robotic
+    landing_date_utc: "2023-08-23"
+    lat: -69.3741
+    lon: 32.32
+    lon_east_360: 32.32
+    outcome: landing
+    coordinate_source: https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_artifact_impacts.html
+    coordinate_source_lroc: https://www.lroc.asu.edu/posts/1314
+    south_polar_dem: {covered: false, note: "69 S is south of the polar DEM edge at 80 S; a mid-latitude DEM would be needed"}
+
+  - id: slim
+    name: SLIM (Moon Sniper)
+    program: JAXA
+    category: robotic
+    landing_date_utc: "2024-01-19"
+    lat: -13.3160
+    lon: 25.2510
+    lon_east_360: 25.2510
+    outcome: landing
+    coordinate_source: https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_artifact_impacts.html
+    coordinate_source_lroc: https://www.lroc.asu.edu/posts/1358
+    south_polar_dem: {covered: false}
+
+  - id: im1
+    name: Intuitive Machines IM-1 (Odysseus, near Malapert A)
+    program: CLPS (Intuitive Machines)
+    category: commercial
+    landing_date_utc: "2024-02-22"
+    lat: -80.13
+    lon: 1.44
+    lon_east_360: 1.44
+    elevation_m: 2579         # NASA LRO page (8,461 ft); reference surface to verify
+    outcome: landing (NASA LRO imaged the lander on the surface)
+    coordinate_source: https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_artifact_impacts.html
+    coordinate_source_lroc: https://www.lroc.asu.edu/posts/1360
+    coordinate_source_nasa_page: https://www.nasa.gov/missions/lro/nasas-lro-images-intuitive-machines-odysseus-lander/
+    south_polar_dem:
+      covered: true
+      dist_from_pole_km: 299
+      truncated_at_100km_range: true   # 299 + 100 > 304
+    notes: >-
+      NASA states the lander sits in a degraded 1 km crater with a local slope of about 12 degrees.
+      At 80.13 S it is right at the edge of the 80 S DEMs.
+
+  - id: change6
+    name: Chang'e 6 (Apollo basin, far side)
+    program: Chang'e (CNSA)
+    category: robotic
+    landing_date_utc: "2024-06-01"
+    lat: -41.6385
+    lon: -153.9852
+    lon_east_360: 206.0148
+    outcome: landing
+    coordinate_source: https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_artifact_impacts.html
+    coordinate_source_lroc: https://www.lroc.asu.edu/images/1374
+    south_polar_dem: {covered: false}
+
+  - id: blueghost1
+    name: Firefly Blue Ghost Mission 1 (Mare Crisium)
+    program: CLPS (Firefly)
+    category: commercial
+    landing_date_utc: "2025-03-02"
+    lat: 18.562
+    lon: 61.810
+    lon_east_360: 61.810
+    outcome: landing
+    coordinate_source: https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_artifact_impacts.html
+    coordinate_source_lroc: https://www.lroc.asu.edu/images/1406
+    south_polar_dem: {covered: false}
+
+  - id: im2
+    name: Intuitive Machines IM-2
+    program: CLPS (Intuitive Machines)
+    category: commercial
+    landing_date_utc: "2025-03-06"
+    lat: -84.7906
+    lon: 29.1957
+    lon_east_360: 29.1957
+    outcome: landing
+    coordinate_source: https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_artifact_impacts.html
+    coordinate_source_lroc: https://www.lroc.asu.edu/images/1408
+    south_polar_dem:
+      covered: true
+      dist_from_pole_km: 158
+      truncated_at_100km_range: false  # 158 + 100 < 304
+    notes: "Best real landing site for the P0 south-polar set: well inside the DEM coverage."
+
+# ---------------------------------------------------------------------------
+# Failed landing attempts (impact sites). Keep them out of the site dropdown.
+# ---------------------------------------------------------------------------
+failed_landing_attempts:
+  - id: beresheet
+    name: Beresheet
+    date_utc: "2019-04-11"
+    lat: 32.5956
+    lon: 19.3496
+    lon_east_360: 19.3496
+    outcome: impact
+    coordinate_source: https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_artifact_impacts.html
+    coordinate_source_lroc: http://lroc.sese.asu.edu/posts/1101
+
+  - id: vikram_chandrayaan2
+    name: Chandrayaan-2 Vikram lander
+    date_utc: "2019-09-06"
+    lat: -70.8810
+    lon: 22.7840
+    lon_east_360: 22.7840
+    outcome: impact
+    coordinate_source: https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_artifact_impacts.html
+    coordinate_source_lroc: http://lroc.sese.asu.edu/posts/1131
+
+  - id: hakutor_m1
+    name: ispace HAKUTO-R Mission 1
+    date_utc: "2023-04-25"
+    lat: 47.581
+    lon: 44.094
+    lon_east_360: 44.094
+    outcome: impact
+    coordinate_source: https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_artifact_impacts.html
+    coordinate_source_nasa_page: https://www.nasa.gov/missions/lro/nasas-lro-views-impact-site-of-hakuto-r-mission-1-moon-lander/
+
+  - id: luna25
+    name: Luna 25
+    date_utc: "2023-08-19"
+    lat: -57.865
+    lon: 61.360
+    lon_east_360: 61.360
+    outcome: impact
+    coordinate_source: https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_artifact_impacts.html
+    coordinate_source_nasa_page: https://www.nasa.gov/feature/goddard/2023/lro-luna-25-impact
+
+  - id: hakutor_m2
+    name: ispace HAKUTO-R Mission 2 (Resilience)
+    date_utc: "2025-06-05"
+    lat: 60.4445
+    lon: -4.588
+    lon_east_360: 355.412
+    outcome: impact
+    coordinate_source: https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_artifact_impacts.html
+    coordinate_source_lroc: https://lroc.im-ldi.com/images/1456
+
+# ---------------------------------------------------------------------------
+# Planned, not landed (low confidence, do not use as a validated site)
+# ---------------------------------------------------------------------------
+planned_not_landed:
+  - id: change7_candidate
+    name: Chang'e-7 candidate site (Shackleton crater rim)
+    status: >-
+      Launch was postponed on 23 August 2026 (tropical system near the Wenchang launch site). A 2 November 2026
+      article describes the mission as poised to launch. I could not confirm a launch or landing as of 2026-11-13.
+    lat: -88.8
+    lon: 123.4
+    lon_east_360: 123.4
+    confidence: low
+    coordinate_source: >-
+      Secondary source only (a Wikipedia mirror citing a 2024 SpaceNews report). China has not published a final
+      landing area, so treat this as a candidate area, not a target.
+    south_polar_dem:
+      covered: true
+      dist_from_pole_km: 36
+      truncated_at_100km_range: false
+    notes: Would be an excellent test for terrain-aware illumination near the pole, once the real coordinates are known.
+
+  - id: artemis3_malapert_massif
+    name: "Artemis III candidate — Malapert Massif"
+    status: >-
+      One of NASA's 13 candidate Artemis III landing regions (announced 2022-08-19, RELEASE22-089). Not landed.
+    lat: -86.0
+    lon: 0.0
+    lon_east_360: 0.0
+    confidence: low
+    coordinate_source: >-
+      Region named in NASA RELEASE22-089 (https://www.nasa.gov/press-release/nasa-identifies-candidate-regions-for-landing-next-americans-on-moon).
+      The release does not publish coordinates; this lat/lon is an approximate center to VERIFY against the published
+      region polygons (LROC QuickMap Artemis III layer).
+    south_polar_dem:
+      covered: true
+      dist_from_pole_km: 121
+      truncated_at_100km_range: false
+    notes: "[Verify] Approximate center only. Verify against the Artemis III region polygon before any use."
+
+  - id: artemis3_peak_near_shackleton
+    name: "Artemis III candidate — Peak Near Shackleton"
+    status: >-
+      One of NASA's 13 candidate Artemis III landing regions (announced 2022-08-19, RELEASE22-089). Not landed.
+    lat: -89.0
+    lon: 125.0
+    lon_east_360: 125.0
+    confidence: low
+    coordinate_source: >-
+      Region named in NASA RELEASE22-089 (https://www.nasa.gov/press-release/nasa-identifies-candidate-regions-for-landing-next-americans-on-moon).
+      The release does not publish coordinates; this lat/lon is an approximate center to VERIFY against the published
+      region polygons (LROC QuickMap Artemis III layer).
+    south_polar_dem:
+      covered: true
+      dist_from_pole_km: 30
+      truncated_at_100km_range: false
+    notes: "[Verify] Approximate center only, essentially at the pole. Verify against the region polygon."
+
+  - id: artemis3_nobile_rim_1
+    name: "Artemis III candidate — Nobile Rim 1"
+    status: >-
+      One of NASA's 13 candidate Artemis III landing regions (announced 2022-08-19, RELEASE22-089). Not landed.
+    lat: -85.2
+    lon: 53.5
+    lon_east_360: 53.5
+    confidence: low
+    coordinate_source: >-
+      Region named in NASA RELEASE22-089 (https://www.nasa.gov/press-release/nasa-identifies-candidate-regions-for-landing-next-americans-on-moon).
+      The release does not publish coordinates; this lat/lon is an approximate center to VERIFY against the published
+      region polygons (LROC QuickMap Artemis III layer).
+    south_polar_dem:
+      covered: true
+      dist_from_pole_km: 145
+      truncated_at_100km_range: false
+    notes: "[Verify] Approximate center only. Verify against the Artemis III region polygon before any use."

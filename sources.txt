@@ -1,0 +1,79 @@
+# Data sources — Lunar Landing Site Navigator (Member 1: Data Engineering)
+# Generated 2026-11-14.
+# Terrain comes from LOLA DEM products; site coordinates come from NASA NSSDCA / LROC tables.
+
+================================================================================
+TERRAIN — LOLA digital elevation models (DEMs)
+================================================================================
+
+1. LDEM_80S_20MPP_ADJ  —  LOLA 20 m/pixel south polar DEM (80S to pole)
+   URL:  https://pgda.gsfc.nasa.gov/data/LOLA_20mpp/LDEM_80S_20MPP_ADJ.TIF  (~2.6 GB GeoTIFF/COG)
+   Page: https://pgda.gsfc.nasa.gov/products/90
+   Use:  PRIMARY high-resolution terrain. Read windowed (never load the full grid).
+
+2. LDEM_80S_40MPP_ADJ  —  LOLA 40 m/pixel south polar DEM (80S to pole)
+   URL:  https://pgda.gsfc.nasa.gov/data/LOLA_20mpp/LDEM_80S_40MPP_ADJ.TIF  (~685 MB GeoTIFF/COG)
+   Page: https://pgda.gsfc.nasa.gov/products/90
+   Use:  Development + reduced-resolution fallback for the online tier.
+
+3. LDEM_80S_80M  —  LOLA 80 m/pixel south polar DEM
+   URL:  https://imbrium.mit.edu/DATA/LOLA_GDR/POLAR/IMG/LDEM_80S_80M.IMG  (PDS3, 111 MB)
+         https://imbrium.mit.edu/DATA/LOLA_GDR/POLAR/JP2/LDEM_80S_80M.JP2  (JPEG2000)
+   List: https://imbrium.mit.edu/BROWSE/LOLA_GDR/POLAR/SOUTH_POLE
+   Use:  Online tier for custom coordinates. NOTE: PDS3/JP2 are NOT readable by
+         rasterio's bundled GDAL (GTiff only) — deferred until a full GDAL build is added.
+
+--------------------------------------------------------------------------------
+OPTIONAL — terrain quality / visualization (not downloaded yet)
+--------------------------------------------------------------------------------
+
+4. LDEM_80S_20MPP_ADJ_ERR / _EFFRES / _HILL  —  20 m error, effective-resolution, hillshade
+   Page: https://pgda.gsfc.nasa.gov/products/90
+   Use:  Data-quality indicator (ERR) and optional map hillshade (HILL).
+
+5. 5 m/pixel site DEMs  (per-site products)
+   Page: https://pgda.gsfc.nasa.gov/products/78
+   Use:  Optional P1 high-res for specific sites. ~90% interpolated pixels — do not
+         claim real 5 m accuracy.
+
+6. LDEC count map + error layers
+   Use:  Optional data-quality indicator for the DEMs.
+
+================================================================================
+SITE COORDINATES
+================================================================================
+
+7.  NASA NSSDCA — Apollo landing sites
+    URL: https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_sites.html
+    Use: Apollo site coordinates (Wagner et al., Icarus 283, 2017; Lunar Module coords).
+
+8.  NASA NSSDCA — lunar artifact impacts (landers / rovers / impactors)
+    URL: https://nssdc.gsfc.nasa.gov/planetary/lunar/lunar_artifact_impacts.html
+    Use: Coordinates for all non-Apollo landed/impacted hardware in sites.yaml.
+
+9.  LROC / Arizona State University site pages
+    URL: per-site (linked from the NSSDCA tables); https://www.lroc.asu.edu
+    Use: Cross-check individual sites and pull updated imagery/coordinates.
+
+10. LROC 2016 table
+    Use: Elevation values recorded in sites.yaml (reference surface not stated — verify).
+
+11. NASA IM-1 page
+    Use: Elevation value for IM-1 (reference surface not stated — verify).
+
+12. NASA RELEASE22-089 — Artemis III candidate landing regions
+    URL: https://www.nasa.gov/press-release/nasa-identifies-candidate-regions-for-landing-next-americans-on-moon
+    Use: Names of the 13 candidate regions. NOTE: the release has NO coordinates; the
+         lat/lon in sites.yaml are approximate [Verify] placeholders.
+
+13. LROC QuickMap — Artemis III candidate-region layer
+    URL: https://quickmap.lroc.asu.edu
+    Use: Verify the Artemis III region polygons/coordinates before promoting a candidate.
+
+================================================================================
+REFERENCE DOCUMENTATION
+================================================================================
+
+14. PDS GDR DEM format documentation
+    URL: https://ode.rsl.wustl.edu/moon/pagehelp/Content/Missions_Instruments/LRO/LOLA/GDR/GDRDEM.htm
+    Use: PDS3 IMG/LBL and DEM format reference for the ingestion adapters.

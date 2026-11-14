@@ -1,0 +1,35 @@
+# DEM dataset catalog (Member 1). Priority 1 = best resolution / preferred.
+# bounds = (min_lat, min_lon, max_lat, max_lon) in planetocentric degrees.
+datasets:
+  - id: LDEM_80S_20MPP_ADJ
+    path: data/raw/LDEM_80S_20MPP_ADJ.TIF
+    format: geotiff
+    resolution: 20
+    priority: 1
+    bounds: [-90.0, -180.0, -80.0, 180.0]
+    units: meters_height
+    coverage_lat_max: -80.0
+    source_url: https://pgda.gsfc.nasa.gov/products/90
+    checksum: null
+
+  - id: LDEM_80S_40MPP_ADJ
+    path: data/raw/LDEM_80S_40MPP_ADJ.TIF
+    format: geotiff
+    resolution: 40
+    priority: 2
+    bounds: [-90.0, -180.0, -80.0, 180.0]
+    units: meters_height
+    coverage_lat_max: -80.0
+    source_url: https://pgda.gsfc.nasa.gov/products/90
+    checksum: null
+
+  - id: LDEM_80S_80M
+    path: data/raw/LDEM_80S_80M.IMG
+    format: pds3_img
+    resolution: 80
+    priority: 3
+    bounds: [-90.0, -180.0, -80.0, 180.0]
+    units: meters_height
+    coverage_lat_max: -80.0
+    source_url: https://imbrium.mit.edu/BROWSE/LOLA_GDR/POLAR/SOUTH_POLE
+    checksum: null

@@ -1,0 +1,111 @@
+# CONTEXT / CONTINUITY NOTES (Member 1: Data Engineering)
+
+Written 2026-11-14 so a fresh session can pick up cleanly if tokens run out.
+The authoritative spec is CLAUDE.md (context.md). This file is the working summary.
+
+## What this project is
+NASA Space Apps Challenge 2026 — "Lunar Landing Site Navigator" terrain-aware
+horizon engine. I am Member 1 (Data Engineering): LOLA south-polar DEMs ->
+clean canonical tiles -> catalog (`select_tile`, `coverage_check`) for Members
+4 (API) and 5 (horizon engine). I own `src/lunarnav/`, `data/`, `datasets.yaml`,
+`sites.yaml`, `scripts/`, `docs/`, `Dockerfile` (later).
+
+## Environment
+- Working dir: /home/pedro/nasa. No git repo, no Docker yet (user deferred both).
+- Python venv: `.venv` (Python 3.14.4). Installed: numpy 2.5.4, rasterio 1.5.2
+  (bundled GDAL 3.12.2), pyproj 3.8.0, pyyaml 6.0.3, pytest 9.2.0.
+  NOTE: no setuptools -> `pip install -e .` is NOT set up; imports use
+  `PYTHONPATH=src` or pytest's `pythonpath=["src"]` (in pyproject.toml).
+- Run tests:  `cd /home/pedro/nasa && .venv/bin/python -m pytest -q`  -> 21 passed.
+- Run scripts: `PYTHONPATH=src .venv/bin/python scripts/<name>.py ...`
+
+## Data download status (data/raw/)
+- LDEM_80S_40MPP_ADJ.TIF  -> 684 MB, COMPLETE, readable (GeoTIFF COG).
+- LDEM_80S_20MPP_ADJ.TIF  -> 2.7 GB, COMPLETE, readable (GeoTIFF COG, 30400x30400, 20 m).
+- LDEM_80S_80M.IMG/.LBL   -> 111 MB, complete but UNREADABLE (no PDS3 driver).
+- Download loop finished.
+
+## What is implemented (all working, tests pass)
+src/lunarnav/
+  conventions.py   R_MOON=1_737_400, FRAME="MOON_ME", CRS (proj4 string),
+                   KM_PER_DEG, meters_to_km / km_to_meters.  (do NOT change
+                   without Member 4 approval — shared constants)
+  tiles.py         DemTile, DatasetInfo, CoverageResult dataclasses (shared
+                   interface; do NOT change DemTile fields).
+  synthetic.py     make_synthetic_dem(kind): flat / rim / cone / wall. Odd grid,
+                   pole at center pixel. rim horizon ~5.55 deg.
+  projection.py    geo_to_xy / xy_to_geo (polar stereographic, pyproj),
+                   distance_from_pole_m, coverage_radius_m. 80S ~ 304 km.
+  ingest/adapters.py   detect_format, geotiff_meta, window_from_xy,
+                   read_geotiff -> RawTile, ADAPTERS={"geotiff": ...}.
+  ingest/normalize.py  normalize_units (radius-m / radius-km / height-km ->
+                   height-m by value range), normalize.
+  ingest/validate.py   ValidationReport, check_projection, check_frame,
+                   validate (8 checks from CLAUDE.md sec 5).
+  ingest/__init__.py   ingest(path,...) -> (DemTile, ValidationReport).
+  catalog.py       load_datasets, list_datasets, coverage_check, select_tile.
+  __init__.py      re-exports select_tile, coverage_check, list_datasets,
+                   DemTile, DatasetInfo, CoverageResult, make_synthetic_dem.
+
+datasets.yaml     catalog (20m prio 1, 40m prio 2, 80m prio 3 / pds3_img).
+pyproject.toml    pythonpath=["src"], testpaths=["tests"].
+scripts/          inspect_dem.py (validate+report), fetch_data.py (curl resume),
+                  crop_dem.py (crop/normalize/downsample + sidecar JSON).
+docs/decisions.md, docs/validation_report_dem.md  (see below).
+tests/            test_synthetic, test_normalize, test_projection,
+                  test_catalog, test_validate, test_select_tile (21 tests).
+
+## KEY contract details (for a future session)
+- DemTile.data = float32, meters above 1,737,400 m sphere, NaN = nodata.
+- DemTile.x0 / y0 = projected coords of the UPPER-LEFT pixel CENTER (not corner).
+  read_geotiff shifts rasterio's corner origin by +dx/2 (x) and -dx/2 (y).
+- South polar stereographic, lat_0=-90, lon_0=0, R=1,737,400 m. Planetocentric
+  lat (south negative), east-positive lon in [-180,180].
+- select_tile(lat, lon, max_range_km, obs_h_m=2.0) returns a square window of
+  2*max_range_km on a side, centered on the site (windowed read, never full
+  load). Falls back to next tier if a read fails (e.g. incomplete 20 m).
+- coverage_check returns covered=False + "COORD_OUT_OF_COVERAGE" for lat > -80,
+  truncated=True when dist_from_pole + range > ~304 km coverage radius.
+
+## Key findings / decisions (also in docs/decisions.md)
+1. Bundled GDAL has ONLY the GTiff driver — no PDS3, no JPEG2000. 80 m IMG
+   deferred; 40 m COG is the reduced-res fallback.
+2. CRS is IAU 2015 ("Moon 2015 Sphere / Ocentric"), NOT MOON_ME (DE421).
+   Projection math identical, but ~0.029 deg (~875 m) frame offset. We keep
+   frame="MOON_ME" for the contract, log a WARNING, and flag for Member 2.
+3. 40 m COG already height-in-meters (no conversion). Unit detector confirmed.
+4. COGs are EVEN grids (15200x15200): pole at a pixel CORNER, not a center
+   pixel. Validator uses center=(n-1)/2 with +/-0.5 tolerance.
+5. PGDA TLS is flaky: curl exit 56 needs --retry-all-errors (plain --retry
+   won't retry it).
+6. Downsampling default = average (np.nanmean); --method max available.
+
+## Horizontal error budget (asked by user)
+- DEM sampling: +-10 m (20 m) / +-20 m (40 m) half-pixel.
+- Frame offset (IAU 2015 vs MOON_ME, uncorrected): ~875 m systematic.
+- Coordinate accuracy: curated sites sub-km; Artemis III placeholders are
+  approximate [Verify] (unknown, possibly km-scale).
+
+## Pending / next steps (in rough priority)
+1. ~~Wait for 20 m download to finish, then run inspect_dem.py on it and add its
+   validation report to docs/validation_report_dem.md.~~ **DONE 2026-11-14**
+2. Cache layer (src/lunarnav/cache/) — horizon cache keyed by (dem_source,
+   algo_version, lat/lon rounded 1e-4, obs_h_m, az_step, max_range). Not done.
+3. Verify Artemis III candidate coordinates (sites.yaml planned_not_landed,
+   marked [Verify] / confidence low).
+4. Optional: 5 m site-DEM tier (mostly interpolated — label honestly).
+5. Docker + git (user deferred; Dockerfile still to write).
+6. Resolve ME vs PA frame with Member 2.
+
+## Verification status (for the record)
+Full suite passes: 21 tests. Three verification agents were launched; the
+subagent environment denies most Bash commands (only `.venv/bin/python -m
+pytest -q` is reliably allowed). Two agents independently confirmed "21 passed"
+and read all code without flagging a bug before hitting the Bash denials. The
+third (static-review-only) attempt may still be running when this is read.
+
+## sites.yaml
+User-authored, ~20 sites + failed_landing_attempts + planned_not_landed. I added
+3 Artemis III candidates (artemis3_malapert_massif -86.0,0.0;
+artemis3_peak_near_shackleton -89.0,125.0; artemis3_nobile_rim_1 -85.2,53.5)
+as clearly-marked [Verify] placeholders. meta.p0_candidates = [im2, im1].

@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lunarnav"
+version = "0.1.0"
+description = "Lunar terrain data layer (Member 1: Data Engineering)"
+requires-python = ">=3.11"
+dependencies = [
+    "numpy",
+    "rasterio",
+    "pyproj",
+    "pyyaml",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
