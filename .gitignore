@@ -1,0 +1,54 @@
+# ---- Large data (never commit; recreate with scripts/fetch_data.py and crop_dem.py) ----
+data/raw/
+data/cache/
+data/processed/*
+# ...but keep the small precomputed horizon profiles; they ship in the Docker image
+!data/processed/horizons/
+
+# Big SPICE binaries (keep data/kernels/CHECKSUMS.txt in git so the fetch script can verify them)
+data/kernels/*.bsp
+data/kernels/*.bpc
+
+# Raster and DEM formats anywhere in the repo (GitHub rejects files over 100 MB)
+*.tif
+*.tiff
+*.img
+*.IMG
+*.jp2
+*.npy
+*.npz
+# ...except tiny synthetic test fixtures
+!tests/fixtures/**
+
+# ---- Python ----
+__pycache__/       # also holds Numba caches (*.nbi, *.nbc)
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ---- Secrets and local config ----
+.env
+.env.*
+!.env.example
+.claude/settings.local.json
+
+# ---- Frontend (web/ is not in the repo yet) ----
+node_modules/
+web/dist/
+
+# ---- Editors, OS, scratch ----
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+*.log
+tmp/
+scratch/
