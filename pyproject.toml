@@ -16,6 +16,7 @@ dependencies = [
     "uvicorn[standard]",
     "pydantic",
     "pyyaml",
+    "spiceypy",
 ]
 
 [tool.setuptools.packages.find]
